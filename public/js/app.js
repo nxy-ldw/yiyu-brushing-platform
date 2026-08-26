@@ -2376,29 +2376,61 @@ async function loadAdminNotifySettings() {
 
                 <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
                 <h4 style="margin-bottom:16px">邮件通知</h4>
-                <div class="admin-form-group" style="display:flex;align-items:center;gap:12px">
+                <div class="admin-form-group" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
                     <label><input type="checkbox" id="emailEnabled" ${s.email_enabled ? 'checked' : ''}> 开启邮件通知</label>
+                    <label style="margin-left:20px">发送方式：</label>
+                    <select id="emailProvider" onchange="toggleEmailProvider()" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                        <option value="smtp" ${(s.email_provider || 'smtp') === 'smtp' ? 'selected' : ''}>SMTP（QQ/163邮箱等）</option>
+                        <option value="resend" ${s.email_provider === 'resend' ? 'selected' : ''}>Resend API（推荐，走HTTPS）</option>
+                    </select>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-                    <div class="admin-form-group">
-                        <label>SMTP服务器</label>
-                        <input type="text" id="smtpHost" value="${s.smtp_host || ''}" placeholder="smtp.qq.com">
+
+                <div id="smtpSection" style="${(s.email_provider || 'smtp') === 'smtp' ? '' : 'display:none'}">
+                    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#92400e;line-height:1.6">
+                        <div style="font-weight:600;margin-bottom:4px">⚠️ 注意</div>
+                        <div>部分云服务器（如Railway免费版）会封禁SMTP端口，导致发送失败。如遇超时请改用 Resend API 模式。</div>
                     </div>
-                    <div class="admin-form-group">
-                        <label>SMTP端口</label>
-                        <input type="number" id="smtpPort" value="${s.smtp_port || 465}" placeholder="465">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                        <div class="admin-form-group">
+                            <label>SMTP服务器</label>
+                            <input type="text" id="smtpHost" value="${s.smtp_host || ''}" placeholder="smtp.qq.com">
+                        </div>
+                        <div class="admin-form-group">
+                            <label>SMTP端口</label>
+                            <input type="number" id="smtpPort" value="${s.smtp_port || 465}" placeholder="465">
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                        <div class="admin-form-group">
+                            <label>SMTP账号</label>
+                            <input type="text" id="smtpUser" value="${s.smtp_user || ''}" placeholder="xxx@qq.com">
+                        </div>
+                        <div class="admin-form-group">
+                            <label>SMTP密码/授权码</label>
+                            <input type="password" id="smtpPass" value="${s.smtp_pass || ''}" placeholder="授权码">
+                        </div>
                     </div>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-                    <div class="admin-form-group">
-                        <label>SMTP账号</label>
-                        <input type="text" id="smtpUser" value="${s.smtp_user || ''}" placeholder="xxx@qq.com">
+
+                <div id="resendSection" style="${s.email_provider === 'resend' ? '' : 'display:none'}">
+                    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#1e40af;line-height:1.6">
+                        <div style="font-weight:600;margin-bottom:4px">💡 Resend API 模式</div>
+                        <div>1. 访问 <a href="https://resend.com/" target="_blank" style="color:#2563eb">resend.com</a> 注册账号</div>
+                        <div>2. 获取 API Key 填入下方</div>
+                        <div>3. 走HTTPS 443端口，不会被服务器封禁</div>
+                        <div>4. 免费每天可发100封邮件</div>
                     </div>
                     <div class="admin-form-group">
-                        <label>SMTP密码/授权码</label>
-                        <input type="password" id="smtpPass" value="${s.smtp_pass || ''}" placeholder="授权码">
+                        <label>Resend API Key</label>
+                        <input type="password" id="resendApiKey" value="${s.resend_api_key || ''}" placeholder="re_xxxxxxxxxxxx">
+                    </div>
+                    <div class="admin-form-group">
+                        <label>发件人邮箱</label>
+                        <input type="text" id="resendFrom" value="${s.resend_from || 'onboarding@resend.dev'}" placeholder="onboarding@resend.dev">
+                        <div style="color:#999;font-size:12px;margin-top:4px">测试可用默认 onboarding@resend.dev，正式使用建议绑定自己的域名</div>
                     </div>
                 </div>
+
                 <div class="admin-form-group">
                     <label>接收通知邮箱</label>
                     <input type="text" id="notifyEmail" value="${s.notify_email || ''}" placeholder="admin@example.com">
@@ -2421,16 +2453,25 @@ async function saveNotifySettings() {
             notify_enabled: $('notifyEnabled').checked,
             sct_key: val('sctKey'),
             email_enabled: $('emailEnabled').checked,
+            email_provider: $('emailProvider').value,
             smtp_host: val('smtpHost'),
             smtp_port: parseInt(val('smtpPort')) || 465,
             smtp_user: val('smtpUser'),
             smtp_pass: val('smtpPass'),
+            resend_api_key: val('resendApiKey'),
+            resend_from: val('resendFrom'),
             notify_email: val('notifyEmail')
         });
         showToast('保存成功', 'success');
     } catch (err) {
         showToast(err.message, 'error');
     }
+}
+
+function toggleEmailProvider() {
+    const provider = $('emailProvider').value;
+    $('smtpSection').style.display = provider === 'smtp' ? '' : 'none';
+    $('resendSection').style.display = provider === 'resend' ? '' : 'none';
 }
 
 async function testWechatNotify() {

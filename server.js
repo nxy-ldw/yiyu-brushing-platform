@@ -1206,15 +1206,18 @@ app.put('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req,
 // ===== 通知推送配置 =====
 app.put('/api/admin/notify-settings', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { notify_enabled, sct_key, email_enabled, smtp_host, smtp_port, smtp_user, smtp_pass, notify_email, notify_wechat } = req.body;
+    const { notify_enabled, sct_key, email_enabled, email_provider, smtp_host, smtp_port, smtp_user, smtp_pass, resend_api_key, resend_from, notify_email, notify_wechat } = req.body;
     const updates = { updated_at: new Date().toISOString() };
     if (notify_enabled !== undefined) updates.notify_enabled = notify_enabled ? 1 : 0;
     if (sct_key !== undefined) updates.sct_key = sct_key || '';
     if (email_enabled !== undefined) updates.email_enabled = email_enabled ? 1 : 0;
+    if (email_provider !== undefined) updates.email_provider = email_provider || 'smtp';
     if (smtp_host !== undefined) updates.smtp_host = smtp_host || '';
     if (smtp_port !== undefined) updates.smtp_port = smtp_port || 465;
     if (smtp_user !== undefined) updates.smtp_user = smtp_user || '';
     if (smtp_pass !== undefined) updates.smtp_pass = smtp_pass || '';
+    if (resend_api_key !== undefined) updates.resend_api_key = resend_api_key || '';
+    if (resend_from !== undefined) updates.resend_from = resend_from || '';
     if (notify_email !== undefined) updates.notify_email = notify_email || '';
     if (notify_wechat !== undefined) updates.notify_wechat = notify_wechat || '';
 
@@ -1235,39 +1238,74 @@ app.put('/api/admin/notify-settings', authMiddleware, adminMiddleware, async (re
 app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const settings = store.findOne('site_settings', { id: 1 });
-    if (!settings || !settings.email_enabled || !settings.smtp_host || !settings.notify_email) {
+    if (!settings || !settings.email_enabled || !settings.notify_email) {
       return res.status(400).json({ error: '请先保存并开启邮件通知配置' });
     }
-    if (!settings.smtp_user || !settings.smtp_pass) {
-      return res.status(400).json({ error: '请填写SMTP账号和密码' });
+
+    const provider = settings.email_provider || 'smtp';
+    const subject = '【测试】邮件推送正常';
+    const text = '恭喜！邮件通知配置成功！\n\n来自：一屿刷课平台\n发送时间：' + new Date().toLocaleString('zh-CN');
+
+    if (provider === 'resend') {
+      // Resend API 模式
+      if (!settings.resend_api_key) {
+        return res.status(400).json({ error: '请填写 Resend API Key' });
+      }
+      const fromAddr = settings.resend_from || 'onboarding@resend.dev';
+      const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + settings.resend_api_key,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: fromAddr,
+          to: [settings.notify_email],
+          subject: subject,
+          text: text
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        return res.status(500).json({ error: 'Resend发送失败：' + (data.message || resp.statusText) });
+      }
+      res.json({ success: true });
+    } else {
+      // SMTP 模式
+      if (!settings.smtp_host) {
+        return res.status(400).json({ error: '请填写SMTP服务器地址' });
+      }
+      if (!settings.smtp_user || !settings.smtp_pass) {
+        return res.status(400).json({ error: '请填写SMTP账号和密码' });
+      }
+
+      const nodemailer = require('nodemailer');
+      const transporter = nodemailer.createTransport({
+        host: settings.smtp_host,
+        port: parseInt(settings.smtp_port) || 465,
+        secure: parseInt(settings.smtp_port) === 465,
+        auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000
+      });
+
+      await transporter.sendMail({
+        from: `"一屿刷课平台" <${settings.smtp_user}>`,
+        to: settings.notify_email,
+        subject: subject,
+        text: text
+      });
+
+      res.json({ success: true });
     }
-
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: settings.smtp_host,
-      port: parseInt(settings.smtp_port) || 465,
-      secure: parseInt(settings.smtp_port) === 465,
-      auth: { user: settings.smtp_user, pass: settings.smtp_pass },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000
-    });
-
-    await transporter.sendMail({
-      from: `"一屿刷课平台" <${settings.smtp_user}>`,
-      to: settings.notify_email,
-      subject: '【测试】邮件推送正常',
-      text: '恭喜！邮件通知配置成功！\n\n来自：一屿刷课平台\n发送时间：' + new Date().toLocaleString('zh-CN')
-    });
-
-    res.json({ success: true });
   } catch (err) {
     console.error('测试邮件失败:', err.message);
     let tip = err.message;
     if (err.code === 'EAUTH' || err.message.includes('authentication')) {
       tip = 'SMTP认证失败，请检查账号和授权码是否正确。QQ邮箱需使用"授权码"而非登录密码。';
     } else if (err.code === 'ETIMEDOUT' || err.message.includes('timeout')) {
-      tip = '连接SMTP服务器超时，请检查服务器地址和端口是否正确。';
+      tip = '连接SMTP服务器超时，可能是服务器封禁了SMTP端口。建议改用 Resend API 模式（走HTTPS）。';
     } else if (err.code === 'ENOTFOUND' || err.message.includes('getaddrinfo')) {
       tip = '无法找到SMTP服务器，请检查服务器地址是否正确。';
     } else if (err.code === 'ECONNREFUSED') {
@@ -1297,24 +1335,44 @@ async function sendNotification(title, content) {
     }
 
     // 邮件通知
-    if (settings.email_enabled && settings.smtp_host && settings.notify_email) {
+    if (settings.email_enabled && settings.notify_email) {
       try {
-        const nodemailer = require('nodemailer');
-        const transporter = nodemailer.createTransport({
-          host: settings.smtp_host,
-          port: parseInt(settings.smtp_port) || 465,
-          secure: parseInt(settings.smtp_port) === 465,
-          auth: { user: settings.smtp_user, pass: settings.smtp_pass },
-          connectionTimeout: 10000,
-          greetingTimeout: 10000,
-          socketTimeout: 15000
-        });
-        await transporter.sendMail({
-          from: `"刷课平台通知" <${settings.smtp_user}>`,
-          to: settings.notify_email,
-          subject: title,
-          text: content
-        });
+        const provider = settings.email_provider || 'smtp';
+        if (provider === 'resend' && settings.resend_api_key) {
+          // Resend API 模式
+          const fromAddr = settings.resend_from || 'onboarding@resend.dev';
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + settings.resend_api_key,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              from: fromAddr,
+              to: [settings.notify_email],
+              subject: title,
+              text: content
+            })
+          });
+        } else if (settings.smtp_host && settings.smtp_user) {
+          // SMTP 模式
+          const nodemailer = require('nodemailer');
+          const transporter = nodemailer.createTransport({
+            host: settings.smtp_host,
+            port: parseInt(settings.smtp_port) || 465,
+            secure: parseInt(settings.smtp_port) === 465,
+            auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000
+          });
+          await transporter.sendMail({
+            from: `"刷课平台通知" <${settings.smtp_user}>`,
+            to: settings.notify_email,
+            subject: title,
+            text: content
+          });
+        }
       } catch (e) {
         console.error('邮件推送失败:', e.message);
       }
