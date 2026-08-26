@@ -540,6 +540,8 @@ async function searchProgress() {
 // ===== 充值 =====
 async function loadRecharge() {
     if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    const principal = parseFloat(currentUser.principal_balance) || 0;
+    const bonus = parseFloat(currentUser.bonus_balance) || 0;
     $('rechargeBalance').innerHTML = parseFloat(currentUser.balance).toFixed(2) + ' <span>元</span>';
     try {
         const data = await api('/recharge/packages');
@@ -552,6 +554,58 @@ async function loadRecharge() {
             </div>
         `).join('');
     } catch {}
+    loadRechargeHistory();
+}
+
+async function loadRechargeHistory() {
+    try {
+        const data = await api('/user/recharges', 'GET', null, false);
+        const statusMap = {
+            'pending': { text: '待支付', color: '#999' },
+            'waiting_confirm': { text: '待审核', color: '#f59e0b' },
+            'success': { text: '已到账', color: '#10b981' },
+            'rejected': { text: '已拒绝', color: '#ef4444' }
+        };
+        const methodMap = { 'wechat': '微信', 'alipay': '支付宝' };
+        const container = $('rechargeHistory');
+        if (!data.recharges || data.recharges.length === 0) {
+            container.innerHTML = '<div style="text-align:center;padding:30px;color:#999;font-size:13px">暂无充值记录</div>';
+            return;
+        }
+        container.innerHTML = data.recharges.map(r => {
+            const st = statusMap[r.status] || { text: r.status, color: '#999' };
+            const total = parseFloat(r.amount) + parseFloat(r.bonus || 0);
+            return `<div class="recharge-record-item">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="font-weight:600;font-size:14px">${methodMap[r.method] || r.method || '微信'}充值</span>
+                    <span style="color:${st.color};font-weight:500;font-size:13px">${st.text}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;color:#666;margin-bottom:4px">
+                    <span>充值金额</span>
+                    <span style="color:#f5576c;font-weight:600">¥${parseFloat(r.amount).toFixed(2)}</span>
+                </div>
+                ${r.bonus ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:#999;margin-bottom:4px">
+                    <span>赠送</span>
+                    <span>¥${parseFloat(r.bonus).toFixed(2)}</span>
+                </div>` : ''}
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#999;margin-bottom:4px">
+                    <span>到账总额</span>
+                    <span style="color:#10b981">¥${total.toFixed(2)}</span>
+                </div>
+                ${r.txn_id ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:#999;margin-bottom:4px">
+                    <span>交易单号</span>
+                    <span style="font-size:11px">${r.txn_id}</span>
+                </div>` : ''}
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#999">
+                    <span>提交时间</span>
+                    <span>${fmtDate(r.created_at)}</span>
+                </div>
+                ${r.reject_reason ? `<div style="margin-top:8px;padding:8px;background:#fef2f2;border-radius:6px;font-size:12px;color:#ef4444">拒绝原因：${r.reject_reason}</div>` : ''}
+            </div>`;
+        }).join('');
+    } catch (err) {
+        $('rechargeHistory').innerHTML = '<div style="text-align:center;padding:30px;color:#ef4444">加载失败</div>';
+    }
 }
 
 function selectRecharge(amount, bonus, el) {
