@@ -1779,24 +1779,31 @@ function showBatchPriceForm() {
                 </div>
                 <div id="batchRatioMode" style="display:none">
                     <div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#1e40af">
-                        💡 以<strong>普通价格</strong>为基准，设置各代理等级的折扣比例。例如填80表示代理价 = 普通价 × 80%
+                        💡 以<strong>普通价格</strong>为基准，设置各代理等级的价格
+                    </div>
+                    <div class="admin-form-group">
+                        <label>计算方式</label>
+                        <div style="display:flex;gap:24px;flex-wrap:wrap">
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="radio" name="ratioCalc" value="percent" checked style="width:auto;margin:0" onchange="toggleRatioCalc()"> 百分比折扣</label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="radio" name="ratioCalc" value="amount" style="width:auto;margin:0" onchange="toggleRatioCalc()"> 直接减金额</label>
+                        </div>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
                         <div class="admin-form-group">
-                            <label>铜牌代理折扣（%）</label>
+                            <label id="labelBronze">铜牌代理折扣（%）</label>
                             <input type="number" id="ratioBronze" step="0.01" placeholder="例如：80">
                         </div>
                         <div class="admin-form-group">
-                            <label>银牌代理折扣（%）</label>
+                            <label id="labelSilver">银牌代理折扣（%）</label>
                             <input type="number" id="ratioSilver" step="0.01" placeholder="例如：70">
                         </div>
                         <div class="admin-form-group">
-                            <label>金牌代理折扣（%）</label>
+                            <label id="labelGold">金牌代理折扣（%）</label>
                             <input type="number" id="ratioGold" step="0.01" placeholder="例如：60">
                         </div>
                     </div>
-                    <div style="color:#999;font-size:12px;margin-bottom:12px">
-                        只填写需要设置的代理等级，留空的等级不修改
+                    <div id="ratioDesc" style="color:#999;font-size:12px;margin-bottom:12px">
+                        填80表示代理价 = 普通价 × 80%。只填写需要设置的代理等级，留空的等级不修改
                     </div>
                 </div>
                 <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#92400e">
@@ -1821,6 +1828,31 @@ function toggleBatchMode() {
     }
 }
 
+function toggleRatioCalc() {
+    const calc = document.querySelector('input[name="ratioCalc"]:checked').value;
+    const labels = ['labelBronze', 'labelSilver', 'labelGold'];
+    const descEl = $('ratioDesc');
+    if (calc === 'percent') {
+        labels.forEach(id => {
+            const el = $(id);
+            if (el) el.textContent = el.textContent.replace('减额（元）', '折扣（%）');
+        });
+        $('ratioBronze').placeholder = '例如：80';
+        $('ratioSilver').placeholder = '例如：70';
+        $('ratioGold').placeholder = '例如：60';
+        descEl.innerHTML = '填80表示代理价 = 普通价 × 80%。只填写需要设置的代理等级，留空的等级不修改';
+    } else {
+        labels.forEach(id => {
+            const el = $(id);
+            if (el) el.textContent = el.textContent.replace('折扣（%）', '减额（元）');
+        });
+        $('ratioBronze').placeholder = '例如：5';
+        $('ratioSilver').placeholder = '例如：10';
+        $('ratioGold').placeholder = '例如：15';
+        descEl.innerHTML = '填5表示代理价 = 普通价 - 5元。只填写需要设置的代理等级，留空的等级不修改';
+    }
+}
+
 async function executeBatchPrice() {
     const category = $('batchCategory').value;
     const mode = document.querySelector('input[name="priceMode"]:checked').value;
@@ -1833,14 +1865,22 @@ async function executeBatchPrice() {
             const bronze = $('ratioBronze').value ? parseFloat($('ratioBronze').value) : null;
             const silver = $('ratioSilver').value ? parseFloat($('ratioSilver').value) : null;
             const gold = $('ratioGold').value ? parseFloat($('ratioGold').value) : null;
-            if (!bronze && !silver && !gold) { showToast('请至少填写一个代理等级的折扣', 'error'); return; }
-            if ((bronze && (bronze <= 0 || bronze > 100)) || (silver && (silver <= 0 || silver > 100)) || (gold && (gold <= 0 || gold > 100))) {
-                showToast('折扣比例必须在 0-100 之间', 'error'); return;
+            const ratioCalc = document.querySelector('input[name="ratioCalc"]:checked').value;
+            if (!bronze && !silver && !gold) { showToast('请至少填写一个代理等级', 'error'); return; }
+            if (ratioCalc === 'percent') {
+                if ((bronze && (bronze <= 0 || bronze > 100)) || (silver && (silver <= 0 || silver > 100)) || (gold && (gold <= 0 || gold > 100))) {
+                    showToast('折扣比例必须在 0-100 之间', 'error'); return;
+                }
+            } else {
+                if ((bronze && bronze < 0) || (silver && silver < 0) || (gold && gold < 0)) {
+                    showToast('减额不能为负数', 'error'); return;
+                }
             }
-            if (!confirm(`确定要按普通价比例设置代理价吗？`)) return;
+            if (!confirm(`确定要按普通价${ratioCalc === 'percent' ? '比例' : '减额'}设置代理价吗？`)) return;
             const result = await api('/admin/products/batch-price', 'POST', {
                 category: category || '',
                 mode: 'ratio',
+                ratio_calc: ratioCalc,
                 ratio_bronze: bronze,
                 ratio_silver: silver,
                 ratio_gold: gold

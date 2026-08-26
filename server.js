@@ -976,7 +976,7 @@ app.post('/api/admin/products', authMiddleware, adminMiddleware, async (req, res
 // 批量改价
 app.post('/api/admin/products/batch-price', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { category, mode, direction, value, price_types, ratio_bronze, ratio_silver, ratio_gold } = req.body;
+    const { category, mode, direction, value, price_types, ratio_calc, ratio_bronze, ratio_silver, ratio_gold } = req.body;
     if (!mode) return res.status(400).json({ error: '参数不完整' });
 
     // 查找商品
@@ -985,24 +985,41 @@ app.post('/api/admin/products/batch-price', authMiddleware, adminMiddleware, asy
     let updated = 0;
 
     if (mode === 'ratio') {
-      // 按普通价比例设置代理价
-      const bronze = ratio_bronze ? parseFloat(ratio_bronze) : null;
-      const silver = ratio_silver ? parseFloat(ratio_silver) : null;
-      const gold = ratio_gold ? parseFloat(ratio_gold) : null;
-      if (!bronze && !silver && !gold) return res.status(400).json({ error: '请至少设置一个代理等级折扣' });
+      // 按普通价设置代理价
+      const calc = ratio_calc === 'amount' ? 'amount' : 'percent';
+      const bronze = ratio_bronze !== null && ratio_bronze !== '' ? parseFloat(ratio_bronze) : null;
+      const silver = ratio_silver !== null && ratio_silver !== '' ? parseFloat(ratio_silver) : null;
+      const gold = ratio_gold !== null && ratio_gold !== '' ? parseFloat(ratio_gold) : null;
+      if (!bronze && !silver && !gold) return res.status(400).json({ error: '请至少设置一个代理等级' });
 
       for (const product of products) {
         const basePrice = parseFloat(product.price);
         if (isNaN(basePrice) || basePrice <= 0) continue;
         const updates = {};
-        if (bronze && bronze > 0 && bronze <= 100) {
-          updates.bronze_price = Math.max(0.01, Math.round(basePrice * bronze / 100 * 100) / 100);
-        }
-        if (silver && silver > 0 && silver <= 100) {
-          updates.silver_price = Math.max(0.01, Math.round(basePrice * silver / 100 * 100) / 100);
-        }
-        if (gold && gold > 0 && gold <= 100) {
-          updates.gold_price = Math.max(0.01, Math.round(basePrice * gold / 100 * 100) / 100);
+        if (calc === 'percent') {
+          if (bronze && bronze > 0 && bronze <= 100) {
+            updates.bronze_price = Math.max(0.01, Math.round(basePrice * bronze / 100 * 100) / 100);
+          }
+          if (silver && silver > 0 && silver <= 100) {
+            updates.silver_price = Math.max(0.01, Math.round(basePrice * silver / 100 * 100) / 100);
+          }
+          if (gold && gold > 0 && gold <= 100) {
+            updates.gold_price = Math.max(0.01, Math.round(basePrice * gold / 100 * 100) / 100);
+          }
+        } else {
+          // 直接减金额
+          if (bronze !== null && bronze >= 0) {
+            const newPrice = basePrice - bronze;
+            updates.bronze_price = Math.max(0.01, Math.round(newPrice * 100) / 100);
+          }
+          if (silver !== null && silver >= 0) {
+            const newPrice = basePrice - silver;
+            updates.silver_price = Math.max(0.01, Math.round(newPrice * 100) / 100);
+          }
+          if (gold !== null && gold >= 0) {
+            const newPrice = basePrice - gold;
+            updates.gold_price = Math.max(0.01, Math.round(newPrice * 100) / 100);
+          }
         }
         if (Object.keys(updates).length > 0) {
           store.update('products', { id: product.id }, updates);
