@@ -302,9 +302,10 @@ function initData() {
   }
 
   if (data.banners.length === 0) {
-    insert('banners', { image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20education%20platform%20banner%20with%20books%20and%20graduation%20cap%20blue%20gradient%20background&image_size=landscape_16_9', link: '', sort_order: 0, status: 1 });
-    insert('banners', { image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=online%20learning%20promotion%20banner%20with%20discount%20tags%20purple%20gradient&image_size=landscape_16_9', link: '', sort_order: 1, status: 1 });
-    insert('banners', { image: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=study%20exam%20preparation%20banner%20with%20clock%20and%20books%20green%20blue%20gradient&image_size=landscape_16_9', link: '', sort_order: 2, status: 1 });
+    insert('banners', { title: '一屿刷课平台', subtitle: '专业 · 快速 · 安全 · 信赖', image: '', link: '', sort_order: 0, status: 1, color: 'purple' });
+    insert('banners', { title: '充值大优惠', subtitle: '充100送20 · 充500送150', image: '', link: '', sort_order: 1, status: 1, color: 'pink' });
+    insert('banners', { title: '学习通全包', subtitle: '专业课选修课全能版', image: '', link: '', sort_order: 2, status: 1, color: 'blue' });
+    insert('banners', { title: '全系列覆盖', subtitle: 'U校园 · 智慧树 · 雨课堂', image: '', link: '', sort_order: 3, status: 1, color: 'green' });
   }
 
   scheduleSave();
