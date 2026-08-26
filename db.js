@@ -1,60 +1,13 @@
-const DATABASE_URL = process.env.DATABASE_URL;
+const { Pool } = require('pg');
 
-let pool;
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://localhost:5432/yiyu',
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
 
-if (DATABASE_URL) {
-  const { Pool } = require('pg');
-  pool = new Pool({
-    connectionString: DATABASE_URL,
-    ssl: DATABASE_URL.includes('railway') ? { rejectUnauthorized: false } : false,
-  });
-  pool.on('connect', (client) => {
-    client.on('error', () => {});
-  });
-} else {
-  const Database = require('better-sqlite3');
-  const dbPath = process.env.DB_PATH || './data/yiyu.db';
-  const fs = require('fs');
-  const dir = require('path').dirname(dbPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const sqliteDb = new Database(dbPath);
-  sqliteDb.pragma('journal_mode = WAL');
-
-  function convertSql(text) {
-    return text
-      .replace(/SERIAL PRIMARY KEY/g, 'INTEGER PRIMARY KEY AUTOINCREMENT')
-      .replace(/BOOLEAN/g, 'INTEGER')
-      .replace(/DECIMAL\(\d+,\d+\)/g, 'REAL')
-      .replace(/\$(\d+)/g, '?');
-  }
-
-  class SqliteClient {
-    query(text, params) {
-      const sql = convertSql(text);
-      const stmt = sqliteDb.prepare(sql);
-      if (sql.trim().toUpperCase().startsWith('SELECT') || sql.trim().toUpperCase().startsWith('PRAGMA') || sql.trim().toUpperCase().startsWith('WITH')) {
-        const rows = stmt.all(...(params || []));
-        return { rows };
-      }
-      const result = stmt.run(...(params || []));
-      return { rows: [], rowCount: result.changes };
-    }
-    release() {}
-    on() { return this; }
-  }
-
-  class SqlitePool {
-    query(text, params) {
-      return Promise.resolve(new SqliteClient().query(text, params));
-    }
-    connect() {
-      return Promise.resolve(new SqliteClient());
-    }
-    on() { return this; }
-  }
-
-  pool = new SqlitePool();
-}
+pool.on('connect', (client) => {
+  client.on('error', () => {});
+});
 
 async function initDB() {
   const client = await pool.connect();
