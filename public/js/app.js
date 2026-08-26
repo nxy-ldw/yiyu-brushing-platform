@@ -196,12 +196,16 @@ function logout() {
 function initBanner() {
     const slides = document.querySelectorAll('.banner-slide');
     const dots = $('bannerDots');
+    if (slides.length === 0) return;
+    dots.innerHTML = '';
     slides.forEach((_, i) => {
         const dot = document.createElement('span');
         if (i === 0) dot.classList.add('active');
         dot.onclick = () => goToBanner(i);
         dots.appendChild(dot);
     });
+    // 确保第一张是激活状态
+    slides.forEach((s, i) => s.classList.toggle('active', i === bannerIndex % slides.length));
     startBannerTimer();
 }
 function startBannerTimer() {
@@ -209,17 +213,33 @@ function startBannerTimer() {
     bannerTimer = setInterval(() => nextBanner(), 5000);
 }
 function goToBanner(idx) {
-    const slides = document.querySelectorAll('.banner-slide');
-    const dots = $('bannerDots').children;
-    slides.forEach(s => s.classList.remove('active'));
-    dots.forEach(d => d.classList.remove('active'));
-    bannerIndex = idx;
-    slides[idx].classList.add('active');
-    dots[idx].classList.add('active');
-    startBannerTimer();
+    try {
+        const slides = document.querySelectorAll('.banner-slide');
+        const dots = $('bannerDots')?.children || [];
+        const len = slides.length;
+        if (len === 0) return;
+        const safeIdx = ((idx % len) + len) % len; // 安全取模
+        // 先激活新的，再移除旧的，避免中间态全透明
+        slides[safeIdx].classList.add('active');
+        if (dots[safeIdx]) dots[safeIdx].classList.add('active');
+        slides.forEach((s, i) => { if (i !== safeIdx) s.classList.remove('active'); });
+        Array.from(dots).forEach((d, i) => { if (i !== safeIdx) d.classList.remove('active'); });
+        bannerIndex = safeIdx;
+        startBannerTimer();
+    } catch (e) {
+        console.warn('Banner switch error:', e);
+    }
 }
-function nextBanner() { goToBanner((bannerIndex + 1) % document.querySelectorAll('.banner-slide').length); }
-function prevBanner() { goToBanner((bannerIndex - 1 + document.querySelectorAll('.banner-slide').length) % document.querySelectorAll('.banner-slide').length); }
+function nextBanner() {
+    const len = document.querySelectorAll('.banner-slide').length;
+    if (len === 0) return;
+    goToBanner(bannerIndex + 1);
+}
+function prevBanner() {
+    const len = document.querySelectorAll('.banner-slide').length;
+    if (len === 0) return;
+    goToBanner(bannerIndex - 1);
+}
 
 // ===== 公告 =====
 async function loadAnnouncements() {
