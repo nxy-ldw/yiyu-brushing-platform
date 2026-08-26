@@ -973,6 +973,61 @@ app.post('/api/admin/products', authMiddleware, adminMiddleware, async (req, res
   }
 });
 
+// 批量改价
+app.post('/api/admin/products/batch-price', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { category, mode, direction, value, price_types } = req.body;
+    if (!mode || !direction || !value || !price_types || !Array.isArray(price_types) || price_types.length === 0) {
+      return res.status(400).json({ error: '参数不完整' });
+    }
+
+    const val = parseFloat(value);
+    if (isNaN(val) || val <= 0) return res.status(400).json({ error: '调整值无效' });
+
+    // 查找商品
+    const conditions = category ? { category } : {};
+    const products = store.findMany('products', conditions).rows;
+    let updated = 0;
+
+    for (const product of products) {
+      const updates = {};
+      for (const priceField of price_types) {
+        let currentPrice = parseFloat(product[priceField]);
+        if (isNaN(currentPrice) || currentPrice <= 0) {
+          // 如果代理价为0或不存在，跳过
+          if (priceField !== 'price') continue;
+        }
+        let newPrice;
+        if (mode === 'percent') {
+          if (direction === 'up') {
+            newPrice = currentPrice * (1 + val / 100);
+          } else {
+            newPrice = currentPrice * (1 - val / 100);
+          }
+        } else {
+          if (direction === 'up') {
+            newPrice = currentPrice + val;
+          } else {
+            newPrice = currentPrice - val;
+          }
+        }
+        // 保留2位小数，最低0.01
+        newPrice = Math.max(0.01, Math.round(newPrice * 100) / 100);
+        updates[priceField] = newPrice;
+      }
+      if (Object.keys(updates).length > 0) {
+        store.update('products', { id: product.id }, updates);
+        updated++;
+      }
+    }
+
+    res.json({ updated, total: products.length });
+  } catch (err) {
+    console.error('Batch price error:', err);
+    res.status(500).json({ error: '批量改价失败' });
+  }
+});
+
 app.put('/api/admin/products/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { title, description, price, originalPrice, image, category, stock, isHot, isNew, status, bronze_price, silver_price, gold_price } = req.body;

@@ -1590,10 +1590,14 @@ async function loadAdminProducts() {
     content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
     try {
         const data = await api('/admin/products');
+        window._adminProducts = data.products || [];
         content.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
                 <h3 style="font-size:18px">商品管理</h3>
-                <button class="btn-admin" onclick="showProductForm()">添加商品</button>
+                <div style="display:flex;gap:8px">
+                    <button class="btn-admin" onclick="showBatchPriceForm()">批量改价</button>
+                    <button class="btn-admin" onclick="showProductForm()">添加商品</button>
+                </div>
             </div>
             <div class="admin-table">
                 <table>
@@ -1682,9 +1686,24 @@ async function saveProduct(id) {
 }
 
 async function editProduct(id) {
+    // 从商品列表缓存中查找（避免调用公开接口拿不到下架商品的问题）
+    if (window._adminProducts) {
+        const p = window._adminProducts.find(x => x.id === id);
+        if (p) {
+            showProductForm(p);
+            return;
+        }
+    }
+    // 兜底：调用后台商品列表再查找
     try {
-        const data = await api(`/products/${id}`);
-        showProductForm(data.product);
+        const data = await api('/admin/products');
+        window._adminProducts = data.products || [];
+        const p = window._adminProducts.find(x => x.id === id);
+        if (p) {
+            showProductForm(p);
+        } else {
+            showToast('商品不存在', 'error');
+        }
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -1695,6 +1714,102 @@ async function deleteProduct(id) {
     try {
         await api(`/admin/products/${id}`, 'DELETE');
         showToast('下架成功', 'success');
+        loadAdminProducts();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// ===== 批量改价 =====
+function showBatchPriceForm() {
+    const products = window._adminProducts || [];
+    const categories = [...new Set(products.map(p => p.category))];
+    const container = $('productFormContainer') || $('batchPriceContainer');
+    // 如果没有专用容器，就加到adminContent里
+    let target = $('batchPriceContainer');
+    if (!target) {
+        target = document.createElement('div');
+        target.id = 'batchPriceContainer';
+        $('adminContent').appendChild(target);
+    }
+    target.innerHTML = `
+        <div class="modal-overlay" style="display:flex;position:fixed;z-index:3000">
+            <div class="modal-box" style="max-width:520px">
+                <button class="modal-close" onclick="document.getElementById('batchPriceContainer').innerHTML=''">&times;</button>
+                <h2>批量改价</h2>
+                <div class="admin-form-group">
+                    <label>选择分类</label>
+                    <select id="batchCategory" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
+                        <option value="">全部分类（${products.length}个商品）</option>
+                        ${categories.map(c => `<option value="${c}">${c}（${products.filter(p=>p.category===c).length}个）</option>`).join('')}
+                    </select>
+                </div>
+                <div class="admin-form-group">
+                    <label>改价方式</label>
+                    <div style="display:flex;gap:16px;flex-wrap:wrap">
+                        <label><input type="radio" name="priceMode" value="percent" checked> 按百分比调整</label>
+                        <label><input type="radio" name="priceMode" value="amount"> 按金额调整</label>
+                    </div>
+                </div>
+                <div class="admin-form-group">
+                    <label>调整值</label>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <input type="number" id="batchValue" step="0.01" placeholder="例如：10" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px">
+                        <select id="batchDirection" style="padding:8px;border:1px solid #ddd;border-radius:6px">
+                            <option value="up">上调（+）</option>
+                            <option value="down">下调（-）</option>
+                        </select>
+                    </div>
+                    <div style="color:#999;font-size:12px;margin-top:4px">
+                        百分比模式：填10表示价格上浮10%或下调10%<br>
+                        金额模式：填5表示每款商品加5元或减5元
+                    </div>
+                </div>
+                <div class="admin-form-group">
+                    <label>应用到哪些价格</label>
+                    <div style="display:flex;gap:16px;flex-wrap:wrap">
+                        <label><input type="checkbox" id="priceNormal" checked> 普通价格</label>
+                        <label><input type="checkbox" id="priceBronze"> 铜牌代理价</label>
+                        <label><input type="checkbox" id="priceSilver"> 银牌代理价</label>
+                        <label><input type="checkbox" id="priceGold"> 金牌代理价</label>
+                    </div>
+                </div>
+                <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#92400e">
+                    <strong>⚠️ 注意：</strong>批量改价不可逆，操作前建议先备份数据。价格最多保留2位小数。
+                </div>
+                <button class="btn-primary btn-full" onclick="executeBatchPrice()">确认批量改价</button>
+            </div>
+        </div>
+    `;
+}
+
+async function executeBatchPrice() {
+    const category = $('batchCategory').value;
+    const mode = document.querySelector('input[name="priceMode"]:checked').value;
+    const direction = $('batchDirection').value;
+    const value = parseFloat($('batchValue').value);
+    if (!value || value <= 0) { showToast('请输入有效的调整值', 'error'); return; }
+    
+    const priceTypes = [];
+    if ($('priceNormal').checked) priceTypes.push('price');
+    if ($('priceBronze').checked) priceTypes.push('bronze_price');
+    if ($('priceSilver').checked) priceTypes.push('silver_price');
+    if ($('priceGold').checked) priceTypes.push('gold_price');
+    if (priceTypes.length === 0) { showToast('请至少选择一种价格类型', 'error'); return; }
+    
+    if (!confirm(`确定要对${category || '全部'}商品的${priceTypes.length}种价格${direction === 'up' ? '上调' : '下调'}${mode === 'percent' ? value + '%' : '¥' + value}吗？`)) return;
+    
+    try {
+        showToast('正在处理...', 'info');
+        const result = await api('/admin/products/batch-price', 'POST', {
+            category: category || '',
+            mode,
+            direction,
+            value,
+            price_types: priceTypes
+        });
+        showToast(`成功更新 ${result.updated} 个商品`, 'success');
+        document.getElementById('batchPriceContainer').innerHTML = '';
         loadAdminProducts();
     } catch (err) {
         showToast(err.message, 'error');
