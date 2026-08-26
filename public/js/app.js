@@ -1022,7 +1022,7 @@ function showProductForm(product = null) {
     const container = $('productFormContainer');
     container.innerHTML = `
         <div class="modal-overlay" style="display:flex;position:fixed;z-index:3000">
-            <div class="modal-box" style="max-width:560px">
+            <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto">
                 <button class="modal-close" onclick="container.innerHTML=''">&times;</button>
                 <h2>${product ? '编辑商品' : '添加商品'}</h2>
                 <div class="admin-form-group"><label>标题</label><input type="text" id="prodTitle" value="${product?.title || ''}"></div>
@@ -1031,7 +1031,9 @@ function showProductForm(product = null) {
                 <div class="admin-form-group"><label>原价</label><input type="number" step="0.01" id="prodOrigPrice" value="${product?.original_price || ''}"></div>
                 <div class="admin-form-group"><label>分类</label><input type="text" id="prodCategory" value="${product?.category || '常用'}"></div>
                 <div class="admin-form-group"><label>库存</label><input type="number" id="prodStock" value="${product?.stock || 999999}"></div>
-                <div class="admin-form-group"><label>图片URL</label><input type="text" id="prodImage" value="${product?.image || ''}"></div>
+                <div class="admin-form-group"><label>商品图片</label>
+                    ${createImageUploader('prodImage', 'prodImagePreview', product?.image || '')}
+                </div>
                 <div class="admin-form-group" style="display:flex;gap:20px">
                     <label><input type="checkbox" id="prodHot" ${product?.is_hot ? 'checked' : ''}> 热销</label>
                     <label><input type="checkbox" id="prodNew" ${product?.is_new ? 'checked' : ''}> 新品</label>
@@ -1190,21 +1192,53 @@ async function deleteAnnouncement(id) {
 
 async function loadAdminBanners() {
     const content = $('adminContent');
-    content.innerHTML = `
-        <h3 style="margin-bottom:16px;font-size:18px">Banner管理</h3>
-        <div class="admin-form-group"><label>图片URL</label><input type="text" id="bannerImage" placeholder="图片链接"></div>
-        <div class="admin-form-group"><label>跳转链接</label><input type="text" id="bannerLink" placeholder="选填"></div>
-        <button class="btn-admin" onclick="createBanner()">添加Banner</button>
-    `;
+    try {
+        const data = await api('/banners');
+        content.innerHTML = `
+            <h3 style="margin-bottom:16px;font-size:18px">Banner管理</h3>
+            <div class="admin-form-group"><label>Banner图片</label>
+                ${createImageUploader('bannerImage', 'bannerImagePreview', '')}
+            </div>
+            <div class="admin-form-group"><label>跳转链接</label><input type="text" id="bannerLink" placeholder="选填"></div>
+            <button class="btn-admin btn-primary" onclick="createBanner()">添加Banner</button>
+            <div style="margin-top:24px">
+                <h4 style="margin-bottom:12px">现有Banner</h4>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+                    ${(data.banners || []).map(b => `
+                        <div style="border:1px solid #eee;border-radius:8px;overflow:hidden">
+                            <img src="${b.image}" style="width:100%;height:100px;object-fit:cover">
+                            <div style="padding:8px;font-size:12px;color:#666">
+                                ${b.link ? `<div>链接: ${b.link.substring(0,20)}...</div>` : ''}
+                                <button class="btn-admin danger" style="margin-top:6px;padding:2px 8px;font-size:11px" onclick="deleteBanner(${b.id})">删除</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
 }
 
 async function createBanner() {
     const image = $('bannerImage').value.trim();
-    if (!image) { showToast('请输入图片URL', 'error'); return; }
+    if (!image) { showToast('请上传或输入图片地址', 'error'); return; }
     const link = $('bannerLink').value.trim();
     try {
         await api('/admin/banners', 'POST', { image, link });
         showToast('添加成功', 'success');
+        loadAdminBanners();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function deleteBanner(id) {
+    if (!confirm('确定删除这个Banner吗？')) return;
+    try {
+        await api(`/admin/banners/${id}`, 'DELETE');
+        showToast('删除成功', 'success');
         loadAdminBanners();
     } catch (err) {
         showToast(err.message, 'error');
@@ -1273,18 +1307,12 @@ async function loadAdminPaySettings() {
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
                     <div class="admin-form-group">
-                        <label>微信收款码图片URL</label>
-                        <input type="text" id="payWechatQr" value="${s.wechat_qr || ''}" placeholder="微信收款码图片链接">
-                        <div style="margin-top:10px;min-height:150px;border:1px dashed #ddd;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fafafa">
-                            ${s.wechat_qr ? `<img src="${s.wechat_qr}" style="max-width:140px;max-height:140px">` : '<span style="color:#999;font-size:13px">预览</span>'}
-                        </div>
+                        <label>微信收款码</label>
+                        ${createImageUploader('payWechatQr', 'payWechatQrPreview', s.wechat_qr || '')}
                     </div>
                     <div class="admin-form-group">
-                        <label>支付宝收款码图片URL</label>
-                        <input type="text" id="payAlipayQr" value="${s.alipay_qr || ''}" placeholder="支付宝收款码图片链接">
-                        <div style="margin-top:10px;min-height:150px;border:1px dashed #ddd;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fafafa">
-                            ${s.alipay_qr ? `<img src="${s.alipay_qr}" style="max-width:140px;max-height:140px">` : '<span style="color:#999;font-size:13px">预览</span>'}
-                        </div>
+                        <label>支付宝收款码</label>
+                        ${createImageUploader('payAlipayQr', 'payAlipayQrPreview', s.alipay_qr || '')}
                     </div>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
@@ -1318,6 +1346,59 @@ async function loadAdminPaySettings() {
         `;
     } catch (err) {
         content.innerHTML = `<div style="text-align:center;padding:40px;color:#f5576c">加载失败：${err.message}</div>`;
+    }
+}
+
+// ===== 图片上传工具 =====
+async function uploadImage(file, inputId) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const result = await api('/admin/upload', 'POST', {
+                    image: e.target.result,
+                    filename: file.name
+                });
+                resolve(result.url);
+            } catch (err) {
+                reject(err);
+            }
+        };
+        reader.onerror = () => reject(new Error('文件读取失败'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function createImageUploader(inputId, previewId, currentValue) {
+    return `
+        <div style="position:relative">
+            <input type="text" id="${inputId}" value="${currentValue || ''}" placeholder="图片URL" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;padding-right:90px">
+            <label style="position:absolute;right:4px;top:50%;transform:translateY(-50%);padding:4px 12px;background:var(--primary);color:#fff;border-radius:4px;font-size:12px;cursor:pointer">
+                上传
+                <input type="file" accept="image/*" style="display:none" onchange="handleImageUpload(this, '${inputId}', '${previewId}')">
+            </label>
+        </div>
+        <div id="${previewId}" style="margin-top:10px;min-height:120px;border:1px dashed #ddd;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fafafa">
+            ${currentValue ? `<img src="${currentValue}" style="max-width:120px;max-height:120px">` : '<span style="color:#999;font-size:13px">图片预览</span>'}
+        </div>
+    `;
+}
+
+async function handleImageUpload(input, urlInputId, previewId) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+        showToast('图片大小不能超过5MB', 'error');
+        return;
+    }
+    try {
+        showToast('上传中...', 'info');
+        const url = await uploadImage(file);
+        $(urlInputId).value = url;
+        $(previewId).innerHTML = `<img src="${url}" style="max-width:120px;max-height:120px">`;
+        showToast('上传成功', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
     }
 }
 

@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -13,9 +14,15 @@ const QQ_APP_ID = process.env.QQ_APP_ID || '1019xxxxx';
 const QQ_APP_KEY = process.env.QQ_APP_KEY || '';
 const QQ_REDIRECT_URI = process.env.QQ_REDIRECT_URI || '';
 
+// 确保上传目录存在
+const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 function authMiddleware(req, res, next) {
@@ -145,9 +152,42 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 
 // ===================== 商品路由 =====================
 
+// ===== 图片上传 =====
+app.post('/api/admin/upload', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { image, filename } = req.body;
+    if (!image) return res.status(400).json({ error: '图片数据不能为空' });
+
+    // 解析 base64 图片
+    let base64Data = image;
+    let ext = 'png';
+    if (image.includes(';base64,')) {
+      const parts = image.split(';base64,');
+      const typeMatch = parts[0].match(/data:image\/(\w+)/);
+      if (typeMatch) ext = typeMatch[1];
+      base64Data = parts[1];
+    }
+
+    // 生成文件名
+    const ts = Date.now();
+    const rand = Math.random().toString(36).substring(2, 8);
+    const fname = filename ? filename.replace(/[^a-zA-Z0-9_.-]/g, '_') : `img_${ts}_${rand}.${ext}`;
+    const filePath = path.join(UPLOAD_DIR, fname);
+
+    // 写入文件
+    const buffer = Buffer.from(base64Data, 'base64');
+    fs.writeFileSync(filePath, buffer);
+
+    res.json({ url: `/uploads/${fname}`, filename: fname });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: '上传失败' });
+  }
+});
+
 app.get('/api/products', async (req, res) => {
   try {
-    const { category, keyword, sort, page = 1, pageSize = 20 } = req.query;
+    const { category, keyword, sort, page = 1, pageSize = 100 } = req.query;
     const conditions = { status: 1 };
     if (category && category !== '全部') conditions.category = category;
     if (keyword) conditions.title = { $like: keyword };
