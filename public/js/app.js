@@ -1746,32 +1746,57 @@ function showBatchPriceForm() {
                 </div>
                 <div class="admin-form-group">
                     <label>改价方式</label>
-                    <div style="display:flex;gap:24px;flex-wrap:wrap">
-                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="radio" name="priceMode" value="percent" checked style="width:auto;margin:0"> 按百分比调整</label>
-                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="radio" name="priceMode" value="amount" style="width:auto;margin:0"> 按金额调整</label>
+                    <div style="display:flex;flex-direction:column;gap:10px">
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="radio" name="priceMode" value="percent" checked style="width:auto;margin:0" onchange="toggleBatchMode()"> 按百分比调整（直接调整所选价格）</label>
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="radio" name="priceMode" value="amount" style="width:auto;margin:0" onchange="toggleBatchMode()"> 按金额调整（直接调整所选价格）</label>
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="radio" name="priceMode" value="ratio" style="width:auto;margin:0" onchange="toggleBatchMode()"> 按普通价比例设置代理价</label>
                     </div>
                 </div>
-                <div class="admin-form-group">
-                    <label>调整值</label>
-                    <div style="display:flex;gap:10px;align-items:flex-end">
-                        <input type="number" id="batchValue" step="0.01" placeholder="例如：10" style="flex:2">
-                        <select id="batchDirection" style="flex:1;min-width:0">
-                            <option value="up">上调（+）</option>
-                            <option value="down">下调（-）</option>
-                        </select>
+                <div id="batchSimpleMode">
+                    <div class="admin-form-group">
+                        <label>调整值</label>
+                        <div style="display:flex;gap:10px;align-items:flex-end">
+                            <input type="number" id="batchValue" step="0.01" placeholder="例如：10" style="flex:2">
+                            <select id="batchDirection" style="flex:1;min-width:0">
+                                <option value="up">上调（+）</option>
+                                <option value="down">下调（-）</option>
+                            </select>
+                        </div>
+                        <div style="color:#999;font-size:12px;margin-top:6px">
+                            百分比模式：填10表示价格上浮10%或下调10%<br>
+                            金额模式：填5表示每款商品加5元或减5元
+                        </div>
                     </div>
-                    <div style="color:#999;font-size:12px;margin-top:6px">
-                        百分比模式：填10表示价格上浮10%或下调10%<br>
-                        金额模式：填5表示每款商品加5元或减5元
+                    <div class="admin-form-group">
+                        <label>应用到哪些价格</label>
+                        <div style="display:flex;gap:20px;flex-wrap:wrap">
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceNormal" checked style="width:auto;margin:0"> 普通价格</label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceBronze" style="width:auto;margin:0"> 铜牌代理价</label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceSilver" style="width:auto;margin:0"> 银牌代理价</label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceGold" style="width:auto;margin:0"> 金牌代理价</label>
+                        </div>
                     </div>
                 </div>
-                <div class="admin-form-group">
-                    <label>应用到哪些价格</label>
-                    <div style="display:flex;gap:20px;flex-wrap:wrap">
-                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceNormal" checked style="width:auto;margin:0"> 普通价格</label>
-                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceBronze" style="width:auto;margin:0"> 铜牌代理价</label>
-                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceSilver" style="width:auto;margin:0"> 银牌代理价</label>
-                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceGold" style="width:auto;margin:0"> 金牌代理价</label>
+                <div id="batchRatioMode" style="display:none">
+                    <div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#1e40af">
+                        💡 以<strong>普通价格</strong>为基准，设置各代理等级的折扣比例。例如填80表示代理价 = 普通价 × 80%
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                        <div class="admin-form-group">
+                            <label>铜牌代理折扣（%）</label>
+                            <input type="number" id="ratioBronze" step="0.01" placeholder="例如：80">
+                        </div>
+                        <div class="admin-form-group">
+                            <label>银牌代理折扣（%）</label>
+                            <input type="number" id="ratioSilver" step="0.01" placeholder="例如：70">
+                        </div>
+                        <div class="admin-form-group">
+                            <label>金牌代理折扣（%）</label>
+                            <input type="number" id="ratioGold" step="0.01" placeholder="例如：60">
+                        </div>
+                    </div>
+                    <div style="color:#999;font-size:12px;margin-bottom:12px">
+                        只填写需要设置的代理等级，留空的等级不修改
                     </div>
                 </div>
                 <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#92400e">
@@ -1783,32 +1808,69 @@ function showBatchPriceForm() {
     `;
 }
 
+function toggleBatchMode() {
+    const mode = document.querySelector('input[name="priceMode"]:checked').value;
+    const simpleEl = $('batchSimpleMode');
+    const ratioEl = $('batchRatioMode');
+    if (mode === 'ratio') {
+        simpleEl.style.display = 'none';
+        ratioEl.style.display = 'block';
+    } else {
+        simpleEl.style.display = 'block';
+        ratioEl.style.display = 'none';
+    }
+}
+
 async function executeBatchPrice() {
     const category = $('batchCategory').value;
     const mode = document.querySelector('input[name="priceMode"]:checked').value;
-    const direction = $('batchDirection').value;
-    const value = parseFloat($('batchValue').value);
-    if (!value || value <= 0) { showToast('请输入有效的调整值', 'error'); return; }
-    
-    const priceTypes = [];
-    if ($('priceNormal').checked) priceTypes.push('price');
-    if ($('priceBronze').checked) priceTypes.push('bronze_price');
-    if ($('priceSilver').checked) priceTypes.push('silver_price');
-    if ($('priceGold').checked) priceTypes.push('gold_price');
-    if (priceTypes.length === 0) { showToast('请至少选择一种价格类型', 'error'); return; }
-    
-    if (!confirm(`确定要对${category || '全部'}商品的${priceTypes.length}种价格${direction === 'up' ? '上调' : '下调'}${mode === 'percent' ? value + '%' : '¥' + value}吗？`)) return;
     
     try {
         showToast('正在处理...', 'info');
-        const result = await api('/admin/products/batch-price', 'POST', {
-            category: category || '',
-            mode,
-            direction,
-            value,
-            price_types: priceTypes
-        });
-        showToast(`成功更新 ${result.updated} 个商品`, 'success');
+        
+        if (mode === 'ratio') {
+            // 按普通价比例模式
+            const bronze = $('ratioBronze').value ? parseFloat($('ratioBronze').value) : null;
+            const silver = $('ratioSilver').value ? parseFloat($('ratioSilver').value) : null;
+            const gold = $('ratioGold').value ? parseFloat($('ratioGold').value) : null;
+            if (!bronze && !silver && !gold) { showToast('请至少填写一个代理等级的折扣', 'error'); return; }
+            if ((bronze && (bronze <= 0 || bronze > 100)) || (silver && (silver <= 0 || silver > 100)) || (gold && (gold <= 0 || gold > 100))) {
+                showToast('折扣比例必须在 0-100 之间', 'error'); return;
+            }
+            if (!confirm(`确定要按普通价比例设置代理价吗？`)) return;
+            const result = await api('/admin/products/batch-price', 'POST', {
+                category: category || '',
+                mode: 'ratio',
+                ratio_bronze: bronze,
+                ratio_silver: silver,
+                ratio_gold: gold
+            });
+            showToast(`成功更新 ${result.updated} 个商品`, 'success');
+        } else {
+            // 百分比/金额模式
+            const direction = $('batchDirection').value;
+            const value = parseFloat($('batchValue').value);
+            if (!value || value <= 0) { showToast('请输入有效的调整值', 'error'); return; }
+            
+            const priceTypes = [];
+            if ($('priceNormal').checked) priceTypes.push('price');
+            if ($('priceBronze').checked) priceTypes.push('bronze_price');
+            if ($('priceSilver').checked) priceTypes.push('silver_price');
+            if ($('priceGold').checked) priceTypes.push('gold_price');
+            if (priceTypes.length === 0) { showToast('请至少选择一种价格类型', 'error'); return; }
+            
+            if (!confirm(`确定要对${category || '全部'}商品的${priceTypes.length}种价格${direction === 'up' ? '上调' : '下调'}${mode === 'percent' ? value + '%' : '¥' + value}吗？`)) return;
+            
+            const result = await api('/admin/products/batch-price', 'POST', {
+                category: category || '',
+                mode,
+                direction,
+                value,
+                price_types: priceTypes
+            });
+            showToast(`成功更新 ${result.updated} 个商品`, 'success');
+        }
+        
         document.getElementById('batchPriceContainer').innerHTML = '';
         loadAdminProducts();
     } catch (err) {

@@ -976,48 +976,75 @@ app.post('/api/admin/products', authMiddleware, adminMiddleware, async (req, res
 // 批量改价
 app.post('/api/admin/products/batch-price', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { category, mode, direction, value, price_types } = req.body;
-    if (!mode || !direction || !value || !price_types || !Array.isArray(price_types) || price_types.length === 0) {
-      return res.status(400).json({ error: '参数不完整' });
-    }
-
-    const val = parseFloat(value);
-    if (isNaN(val) || val <= 0) return res.status(400).json({ error: '调整值无效' });
+    const { category, mode, direction, value, price_types, ratio_bronze, ratio_silver, ratio_gold } = req.body;
+    if (!mode) return res.status(400).json({ error: '参数不完整' });
 
     // 查找商品
     const conditions = category ? { category } : {};
     const products = store.findMany('products', conditions).rows;
     let updated = 0;
 
-    for (const product of products) {
-      const updates = {};
-      for (const priceField of price_types) {
-        let currentPrice = parseFloat(product[priceField]);
-        if (isNaN(currentPrice) || currentPrice <= 0) {
-          // 如果代理价为0或不存在，跳过
-          if (priceField !== 'price') continue;
+    if (mode === 'ratio') {
+      // 按普通价比例设置代理价
+      const bronze = ratio_bronze ? parseFloat(ratio_bronze) : null;
+      const silver = ratio_silver ? parseFloat(ratio_silver) : null;
+      const gold = ratio_gold ? parseFloat(ratio_gold) : null;
+      if (!bronze && !silver && !gold) return res.status(400).json({ error: '请至少设置一个代理等级折扣' });
+
+      for (const product of products) {
+        const basePrice = parseFloat(product.price);
+        if (isNaN(basePrice) || basePrice <= 0) continue;
+        const updates = {};
+        if (bronze && bronze > 0 && bronze <= 100) {
+          updates.bronze_price = Math.max(0.01, Math.round(basePrice * bronze / 100 * 100) / 100);
         }
-        let newPrice;
-        if (mode === 'percent') {
-          if (direction === 'up') {
-            newPrice = currentPrice * (1 + val / 100);
-          } else {
-            newPrice = currentPrice * (1 - val / 100);
-          }
-        } else {
-          if (direction === 'up') {
-            newPrice = currentPrice + val;
-          } else {
-            newPrice = currentPrice - val;
-          }
+        if (silver && silver > 0 && silver <= 100) {
+          updates.silver_price = Math.max(0.01, Math.round(basePrice * silver / 100 * 100) / 100);
         }
-        // 保留2位小数，最低0.01
-        newPrice = Math.max(0.01, Math.round(newPrice * 100) / 100);
-        updates[priceField] = newPrice;
+        if (gold && gold > 0 && gold <= 100) {
+          updates.gold_price = Math.max(0.01, Math.round(basePrice * gold / 100 * 100) / 100);
+        }
+        if (Object.keys(updates).length > 0) {
+          store.update('products', { id: product.id }, updates);
+          updated++;
+        }
       }
-      if (Object.keys(updates).length > 0) {
-        store.update('products', { id: product.id }, updates);
-        updated++;
+    } else {
+      // 百分比/金额模式
+      if (!direction || !value || !price_types || !Array.isArray(price_types) || price_types.length === 0) {
+        return res.status(400).json({ error: '参数不完整' });
+      }
+      const val = parseFloat(value);
+      if (isNaN(val) || val <= 0) return res.status(400).json({ error: '调整值无效' });
+
+      for (const product of products) {
+        const updates = {};
+        for (const priceField of price_types) {
+          let currentPrice = parseFloat(product[priceField]);
+          if (isNaN(currentPrice) || currentPrice <= 0) {
+            if (priceField !== 'price') continue;
+          }
+          let newPrice;
+          if (mode === 'percent') {
+            if (direction === 'up') {
+              newPrice = currentPrice * (1 + val / 100);
+            } else {
+              newPrice = currentPrice * (1 - val / 100);
+            }
+          } else {
+            if (direction === 'up') {
+              newPrice = currentPrice + val;
+            } else {
+              newPrice = currentPrice - val;
+            }
+          }
+          newPrice = Math.max(0.01, Math.round(newPrice * 100) / 100);
+          updates[priceField] = newPrice;
+        }
+        if (Object.keys(updates).length > 0) {
+          store.update('products', { id: product.id }, updates);
+          updated++;
+        }
       }
     }
 
