@@ -1094,6 +1094,10 @@ async function deleteQQGroup(id) {
 function adminTab(tab, el) {
     document.querySelectorAll('.admin-nav a').forEach(a => a.classList.remove('active'));
     el.classList.add('active');
+    // 点击对应模块后标记已读
+    if (tab === 'orders' || tab === 'recharges' || tab === 'withdrawals') {
+        markModuleRead(tab);
+    }
     if (tab === 'dashboard') loadAdminDashboard();
     else if (tab === 'users') loadAdminUsers();
     else if (tab === 'products') loadAdminProducts();
@@ -1107,12 +1111,68 @@ function adminTab(tab, el) {
     else if (tab === 'qq-groups') loadAdminQQGroups();
     else if (tab === 'pay-settings') loadAdminPaySettings();
     else if (tab === 'site-settings') loadAdminSiteSettings();
+    else if (tab === 'notify-settings') loadAdminNotifySettings();
     else if (tab === 'backup') loadAdminBackup();
+}
+
+let unreadTimer = null;
+async function refreshUnreadBadges() {
+    try {
+        const data = await api('/admin/unread-count', 'GET', null, false);
+        // 订单
+        const badgeOrders = $('badgeOrders');
+        if (badgeOrders) {
+            if (data.orders > 0) {
+                badgeOrders.style.display = 'inline-block';
+                badgeOrders.textContent = data.orders > 99 ? '99+' : data.orders;
+            } else {
+                badgeOrders.style.display = 'none';
+            }
+        }
+        // 充值审核
+        const badgeRecharges = $('badgeRecharges');
+        if (badgeRecharges) {
+            if (data.recharges > 0) {
+                badgeRecharges.style.display = 'inline-block';
+                badgeRecharges.textContent = data.recharges > 99 ? '99+' : data.recharges;
+            } else {
+                badgeRecharges.style.display = 'none';
+            }
+        }
+        // 提现审核
+        const badgeWithdrawals = $('badgeWithdrawals');
+        if (badgeWithdrawals) {
+            if (data.withdrawals > 0) {
+                badgeWithdrawals.style.display = 'inline-block';
+                badgeWithdrawals.textContent = data.withdrawals > 99 ? '99+' : data.withdrawals;
+            } else {
+                badgeWithdrawals.style.display = 'none';
+            }
+        }
+    } catch {}
+}
+
+async function markModuleRead(module) {
+    try {
+        await api('/admin/mark-read', 'POST', { module });
+        refreshUnreadBadges();
+    } catch {}
+}
+
+function startUnreadPolling() {
+    if (unreadTimer) clearInterval(unreadTimer);
+    refreshUnreadBadges();
+    unreadTimer = setInterval(refreshUnreadBadges, 30000); // 30秒刷新一次
+}
+
+function stopUnreadPolling() {
+    if (unreadTimer) { clearInterval(unreadTimer); unreadTimer = null; }
 }
 
 async function loadAdmin() {
     if (!currentUser || currentUser.role !== 'admin') { showToast('无权限', 'error'); navigate('home'); return; }
     loadAdminDashboard();
+    startUnreadPolling();
 }
 
 async function loadAdminDashboard() {
@@ -2283,6 +2343,114 @@ async function sendBroadcast() {
     } catch (err) {
         showToast(err.message, 'error');
     }
+}
+
+// ===== 通知设置 =====
+async function loadAdminNotifySettings() {
+    const content = $('adminContent');
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/site-settings');
+        const s = data.settings || {};
+        content.innerHTML = `
+            <h3 style="margin-bottom:20px;font-size:18px">通知推送设置</h3>
+            <div class="admin-form">
+                <div class="admin-form-group" style="display:flex;align-items:center;gap:12px">
+                    <label><input type="checkbox" id="notifyEnabled" ${s.notify_enabled ? 'checked' : ''}> 开启通知推送</label>
+                    <span style="color:#999;font-size:12px">开启后有新订单、充值审核、提现审核时自动推送</span>
+                </div>
+
+                <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+                <h4 style="margin-bottom:16px">微信推送（Server酱）</h4>
+                <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#92400e;line-height:1.6">
+                    <div style="font-weight:600;margin-bottom:4px">💡 使用说明</div>
+                    <div>1. 访问 <a href="https://sct.ftqq.com/" target="_blank" style="color:#2563eb">Server酱官网</a> 注册账号</div>
+                    <div>2. 绑定微信，获取 SendKey</div>
+                    <div>3. 将 SendKey 填入下方即可</div>
+                </div>
+                <div class="admin-form-group">
+                    <label>Server酱 SendKey</label>
+                    <input type="text" id="sctKey" value="${s.sct_key || ''}" placeholder="SCTxxxxx">
+                </div>
+                <button class="btn-admin" onclick="testWechatNotify()">测试微信推送</button>
+
+                <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+                <h4 style="margin-bottom:16px">邮件通知</h4>
+                <div class="admin-form-group" style="display:flex;align-items:center;gap:12px">
+                    <label><input type="checkbox" id="emailEnabled" ${s.email_enabled ? 'checked' : ''}> 开启邮件通知</label>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                    <div class="admin-form-group">
+                        <label>SMTP服务器</label>
+                        <input type="text" id="smtpHost" value="${s.smtp_host || ''}" placeholder="smtp.qq.com">
+                    </div>
+                    <div class="admin-form-group">
+                        <label>SMTP端口</label>
+                        <input type="number" id="smtpPort" value="${s.smtp_port || 465}" placeholder="465">
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                    <div class="admin-form-group">
+                        <label>SMTP账号</label>
+                        <input type="text" id="smtpUser" value="${s.smtp_user || ''}" placeholder="xxx@qq.com">
+                    </div>
+                    <div class="admin-form-group">
+                        <label>SMTP密码/授权码</label>
+                        <input type="password" id="smtpPass" value="${s.smtp_pass || ''}" placeholder="授权码">
+                    </div>
+                </div>
+                <div class="admin-form-group">
+                    <label>接收通知邮箱</label>
+                    <input type="text" id="notifyEmail" value="${s.notify_email || ''}" placeholder="admin@example.com">
+                </div>
+                <button class="btn-admin" onclick="testEmailNotify()">测试邮件推送</button>
+
+                <div style="margin-top:24px">
+                    <button class="btn-admin btn-primary" onclick="saveNotifySettings()">保存设置</button>
+                </div>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = `<div style="text-align:center;padding:40px;color:#f5576c">加载失败：${err.message}</div>`;
+    }
+}
+
+async function saveNotifySettings() {
+    try {
+        await api('/admin/notify-settings', 'PUT', {
+            notify_enabled: $('notifyEnabled').checked,
+            sct_key: val('sctKey'),
+            email_enabled: $('emailEnabled').checked,
+            smtp_host: val('smtpHost'),
+            smtp_port: parseInt(val('smtpPort')) || 465,
+            smtp_user: val('smtpUser'),
+            smtp_pass: val('smtpPass'),
+            notify_email: val('notifyEmail')
+        });
+        showToast('保存成功', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function testWechatNotify() {
+    const key = val('sctKey');
+    if (!key) { showToast('请先填写SendKey', 'error'); return; }
+    try {
+        // 直接调用测试
+        const url = `https://sctapi.ftqq.com/${key}.send`;
+        const params = new URLSearchParams();
+        params.append('title', '【测试】微信推送正常');
+        params.append('desp', '恭喜！Server酱微信推送配置成功！\n\n来自：一屿刷课平台');
+        await fetch(url, { method: 'POST', body: params });
+        showToast('测试消息已发送，请查收微信', 'success');
+    } catch (err) {
+        showToast('发送失败：' + err.message, 'error');
+    }
+}
+
+async function testEmailNotify() {
+    showToast('请先保存设置后再测试', 'info');
 }
 
 // ===== 数据备份 =====

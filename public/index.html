@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>一屿刷课平台</title>
-    <link rel="stylesheet" href="/css/style.css?v=20260827v2">
+    <link rel="stylesheet" href="/css/style.css?v=20260827v3">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 </head>
@@ -390,9 +390,9 @@
                             <a class="active" onclick="adminTab('dashboard', this)">数据看板</a>
                             <a onclick="adminTab('users', this)">用户管理</a>
                             <a onclick="adminTab('products', this)">商品管理</a>
-                            <a onclick="adminTab('orders', this)">订单管理</a>
-                            <a onclick="adminTab('recharges', this)">充值审核</a>
-                            <a onclick="adminTab('withdrawals', this)">提现审核</a>
+                            <a onclick="adminTab('orders', this)">订单管理 <span class="nav-badge" id="badgeOrders" style="display:none">0</span></a>
+                            <a onclick="adminTab('recharges', this)">充值审核 <span class="nav-badge" id="badgeRecharges" style="display:none">0</span></a>
+                            <a onclick="adminTab('withdrawals', this)">提现审核 <span class="nav-badge" id="badgeWithdrawals" style="display:none">0</span></a>
                             <a onclick="adminTab('messages', this)">消息群发</a>
                             <a onclick="adminTab('announcements', this)">公告管理</a>
                             <a onclick="adminTab('banners', this)">Banner管理</a>
@@ -400,6 +400,7 @@
                             <a onclick="adminTab('qq-groups', this)">QQ群管理</a>
                             <a onclick="adminTab('pay-settings', this)">支付设置</a>
                             <a onclick="adminTab('site-settings', this)">站点设置</a>
+                            <a onclick="adminTab('notify-settings', this)">通知设置</a>
                             <a onclick="adminTab('backup', this)">数据备份</a>
                         </nav>
                     </aside>
@@ -561,6 +562,6 @@
         </svg>
     </div>
 
-    <script src="/js/app.js?v=20260827v2"></script>
+    <script src="/js/app.js?v=20260827v3"></script>
 </body>
 </html>

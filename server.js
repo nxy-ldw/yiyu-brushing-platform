@@ -292,6 +292,10 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     store.update('products', { id: parseInt(productId) }, { sales: { $inc: qty } });
     store.insert('messages', { user_id: req.user.id, title: '下单成功', content: `您的订单 ${orderNo} 已创建，商品：${product.title}，金额：${total.toFixed(4)}元`, type: 'order', is_read: 0, created_at: new Date().toISOString() });
 
+    // 新订单通知
+    sendNotification('【新订单提醒】', 
+      `订单号：${orderNo}\n商品：${product.title}\n金额：${total.toFixed(2)}元\n账号：${account}\n学校：${school || '-'}\n课程：${course_name || '-'}\n请及时处理！`);
+
     res.json({ order });
   } catch (err) {
     console.error('Create order error:', err);
@@ -365,6 +369,13 @@ app.post('/api/recharge/confirm', authMiddleware, async (req, res) => {
       txn_id: txnId,
       confirm_at: new Date().toISOString()
     });
+
+    // 充值审核通知
+    const user = store.findOne('users', { id: req.user.id });
+    const methodName = payMethod === 'alipay' ? '支付宝' : '微信';
+    const totalAmount = parseFloat(recharge.amount) + parseFloat(recharge.bonus || 0);
+    sendNotification('【充值审核提醒】', 
+      `用户：${user?.username || '未知'}\n手机：${user?.phone || '-'}\n金额：${recharge.amount}元\n赠送：${recharge.bonus || 0}元\n到账：${totalAmount}元\n支付方式：${methodName}\n交易单号：${txnId}\n请及时审核！`);
 
     res.json({ success: true, message: '已提交支付凭证，请等待管理员审核' });
   } catch (err) {
@@ -518,6 +529,11 @@ app.post('/api/withdrawals', authMiddleware, async (req, res) => {
       is_read: false,
       created_at: new Date().toISOString()
     });
+
+    // 提现审核通知
+    const wUser = store.findOne('users', { id: req.user.id });
+    sendNotification('【提现审核提醒】', 
+      `单号：${withdrawNo}\n用户：${wUser?.username || '未知'}\n手机：${wUser?.phone || '-'}\n提现金额：${amt}元\n手续费：${fee.toFixed(2)}元\n实际到账：${actualAmount.toFixed(2)}元\n微信号：${wechat_account}\n姓名：${wechat_name}\n${remark ? '备注：' + remark + '\n' : ''}请及时审核！`);
 
     res.json({ withdrawal });
   } catch (err) {
@@ -1184,6 +1200,118 @@ app.put('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req,
   } catch (err) {
     console.error('Update site settings error:', err);
     res.status(500).json({ error: '更新站点设置失败' });
+  }
+});
+
+// ===== 通知推送配置 =====
+app.put('/api/admin/notify-settings', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { notify_enabled, sct_key, email_enabled, smtp_host, smtp_port, smtp_user, smtp_pass, notify_email, notify_wechat } = req.body;
+    const updates = { updated_at: new Date().toISOString() };
+    if (notify_enabled !== undefined) updates.notify_enabled = notify_enabled ? 1 : 0;
+    if (sct_key !== undefined) updates.sct_key = sct_key || '';
+    if (email_enabled !== undefined) updates.email_enabled = email_enabled ? 1 : 0;
+    if (smtp_host !== undefined) updates.smtp_host = smtp_host || '';
+    if (smtp_port !== undefined) updates.smtp_port = smtp_port || 465;
+    if (smtp_user !== undefined) updates.smtp_user = smtp_user || '';
+    if (smtp_pass !== undefined) updates.smtp_pass = smtp_pass || '';
+    if (notify_email !== undefined) updates.notify_email = notify_email || '';
+    if (notify_wechat !== undefined) updates.notify_wechat = notify_wechat || '';
+
+    const existing = store.findOne('site_settings', { id: 1 });
+    if (existing) {
+      store.update('site_settings', { id: 1 }, updates);
+    } else {
+      store.insert('site_settings', { id: 1, ...updates });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Update notify settings error:', err);
+    res.status(500).json({ error: '更新通知设置失败' });
+  }
+});
+
+// 发送通知（Server酱 + 邮件）
+async function sendNotification(title, content) {
+  try {
+    const settings = store.findOne('site_settings', { id: 1 });
+    if (!settings || !settings.notify_enabled) return;
+
+    // Server酱微信推送
+    if (settings.sct_key) {
+      try {
+        const url = `https://sctapi.ftqq.com/${settings.sct_key}.send`;
+        const params = new URLSearchParams();
+        params.append('title', title);
+        params.append('desp', content);
+        await fetch(url, { method: 'POST', body: params });
+      } catch (e) {
+        console.error('Server酱推送失败:', e.message);
+      }
+    }
+
+    // 邮件通知
+    if (settings.email_enabled && settings.smtp_host && settings.notify_email) {
+      try {
+        const nodemailer = require('nodemailer');
+        const transporter = nodemailer.createTransport({
+          host: settings.smtp_host,
+          port: parseInt(settings.smtp_port) || 465,
+          secure: parseInt(settings.smtp_port) === 465,
+          auth: { user: settings.smtp_user, pass: settings.smtp_pass }
+        });
+        await transporter.sendMail({
+          from: `"刷课平台通知" <${settings.smtp_user}>`,
+          to: settings.notify_email,
+          subject: title,
+          text: content
+        });
+      } catch (e) {
+        console.error('邮件推送失败:', e.message);
+      }
+    }
+  } catch (e) {
+    console.error('发送通知异常:', e.message);
+  }
+}
+
+// ===== 未读统计 =====
+app.get('/api/admin/unread-count', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    // 获取管理员最后阅读时间
+    const readLog = store.findOne('admin_read_logs', { user_id: req.user.id });
+    const lastRead = readLog?.last_read_at || '2000-01-01T00:00:00.000Z';
+
+    // 统计各模块未读
+    const newOrders = store.findMany('orders', {}, { sort: { created_at: 'desc' } }).rows.filter(o => o.created_at > lastRead).length;
+    const newRecharges = store.findMany('recharges', { status: 'waiting_confirm' }, { sort: { created_at: 'desc' } }).rows.filter(r => r.created_at > lastRead).length;
+    const newWithdrawals = store.findMany('withdrawals', { status: 'pending' }, { sort: { created_at: 'desc' } }).rows.filter(w => w.created_at > lastRead).length;
+
+    res.json({
+      orders: newOrders,
+      recharges: newRecharges,
+      withdrawals: newWithdrawals,
+      total: newOrders + newRecharges + newWithdrawals
+    });
+  } catch (err) {
+    res.status(500).json({ error: '获取失败' });
+  }
+});
+
+// 标记已读
+app.post('/api/admin/mark-read', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { module } = req.body;
+    const existing = store.findOne('admin_read_logs', { user_id: req.user.id });
+    const now = new Date().toISOString();
+    if (existing) {
+      store.update('admin_read_logs', { user_id: req.user.id }, { last_read_at: now });
+    } else {
+      store.insert('admin_read_logs', { user_id: req.user.id, last_read_at: now });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: '操作失败' });
   }
 });
 
