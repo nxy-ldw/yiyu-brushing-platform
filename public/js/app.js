@@ -231,7 +231,9 @@ async function loadProducts(keyword = '') {
             grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999">暂无商品</div>';
             return;
         }
-        grid.innerHTML = data.products.map(p => `
+        grid.innerHTML = data.products.map(p => {
+            const displayPrice = getProductPrice(p);
+            return `
             <div class="product-card" onclick="showOrderModal(${p.id})">
                 <div class="product-img">
                     ${p.image ? `<img src="${p.image}" style="width:100%;height:100%;object-fit:cover">` : `<div class="product-img-placeholder">${p.title.charAt(0)}</div>`}
@@ -241,7 +243,7 @@ async function loadProducts(keyword = '') {
                 <div class="product-info">
                     <div class="product-title">${p.title}</div>
                     <div class="product-meta">
-                        <span class="product-price">¥${fmtPrice(p.price)}</span>
+                        <span class="product-price">¥${fmtPrice(displayPrice)}</span>
                         <span class="product-sales">已售${p.sales}+</span>
                     </div>
                     <div class="product-footer">
@@ -250,10 +252,26 @@ async function loadProducts(keyword = '') {
                     </div>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
     } catch (err) {
         grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f5576c">加载失败</div>';
     }
+}
+
+function getProductPrice(product) {
+    const level = currentUser?.agent_level || 0;
+    if (level === 1 && product.bronze_price) return product.bronze_price;
+    if (level === 2 && product.silver_price) return product.silver_price;
+    if (level === 3 && product.gold_price) return product.gold_price;
+    return product.price;
+}
+
+function getAgentLevelName(level) {
+    const lv = parseInt(level) || 0;
+    if (lv === 1) return '铜牌代理';
+    if (lv === 2) return '银牌代理';
+    if (lv === 3) return '金牌代理';
+    return '普通用户';
 }
 
 function sortProducts(sort, btn) {
@@ -276,16 +294,30 @@ async function showOrderModal(productId) {
         const data = await api(`/products/${productId}`);
         const p = data.product;
         currentProductId = productId;
+        const userLevel = currentUser.agent_level || 0;
+        const displayPrice = getProductPrice(p);
+        
+        // 价格对比表
+        const priceRows = [];
+        priceRows.push(`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#666"><span>普通用户</span><span>¥${fmtPrice(p.price)}</span></div>`);
+        if (p.bronze_price) priceRows.push(`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;${userLevel==1?'color:#cd7f32;font-weight:600':'color:#999'}"><span>🥉 铜牌代理</span><span>¥${fmtPrice(p.bronze_price)}</span></div>`);
+        if (p.silver_price) priceRows.push(`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;${userLevel==2?'color:#c0c0c0;font-weight:600':'color:#999'}"><span>🥈 银牌代理</span><span>¥${fmtPrice(p.silver_price)}</span></div>`);
+        if (p.gold_price) priceRows.push(`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;${userLevel==3?'color:#ffd700;font-weight:600':'color:#999'}"><span>🥇 金牌代理</span><span>¥${fmtPrice(p.gold_price)}</span></div>`);
+        
         $('orderProductInfo').innerHTML = `
-            <div style="display:flex;gap:12px;margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px">
+            <div style="display:flex;gap:12px;margin-bottom:12px;padding:12px;background:var(--bg);border-radius:8px">
                 <div style="width:60px;height:60px;background:linear-gradient(135deg,#f0f0f5,#e8e8f0);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--primary);opacity:.2">${p.title.charAt(0)}</div>
                 <div style="flex:1">
                     <div style="font-weight:600;font-size:14px">${p.title}</div>
-                    <div style="color:var(--accent);font-weight:700;margin-top:4px">¥${fmtPrice(p.price)}</div>
+                    <div style="color:var(--accent);font-weight:700;margin-top:4px">您的价格：¥${fmtPrice(displayPrice)} <span style="font-size:11px;font-weight:400;color:#999">(${getAgentLevelName(userLevel)})</span></div>
                 </div>
+            </div>
+            <div style="padding:10px 12px;background:#fafafa;border-radius:8px;margin-bottom:12px">
+                <div style="font-size:12px;color:#999;margin-bottom:6px">价格对比</div>
+                ${priceRows.join('')}
             </div>`;
         $('orderQty').value = 1;
-        $('orderTotal').textContent = fmtPrice(p.price) + '元';
+        $('orderTotal').textContent = fmtPrice(displayPrice) + '元';
         $('orderAccount').value = '';
         $('orderPassword').value = '';
         $('orderRemark').value = '';
@@ -307,7 +339,8 @@ async function updateOrderTotal() {
     try {
         const data = await api(`/products/${currentProductId}`);
         const qty = parseInt($('orderQty').value) || 1;
-        const total = parseFloat(data.product.price) * qty;
+        const price = getProductPrice(data.product);
+        const total = parseFloat(price) * qty;
         $('orderTotal').textContent = fmtPrice(total) + '元';
     } catch {}
 }
@@ -802,12 +835,14 @@ function adminTab(tab, el) {
     else if (tab === 'users') loadAdminUsers();
     else if (tab === 'products') loadAdminProducts();
     else if (tab === 'orders') loadAdminOrders();
+    else if (tab === 'messages') loadAdminMessages();
     else if (tab === 'announcements') loadAdminAnnouncements();
     else if (tab === 'banners') loadAdminBanners();
     else if (tab === 'cards') loadAdminCards();
     else if (tab === 'qq-groups') loadAdminQQGroups();
     else if (tab === 'pay-settings') loadAdminPaySettings();
     else if (tab === 'site-settings') loadAdminSiteSettings();
+    else if (tab === 'backup') loadAdminBackup();
 }
 
 async function loadAdmin() {
@@ -891,7 +926,7 @@ async function loadAdminUsers() {
     const content = $('adminContent');
     content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
     try {
-        const data = await api('/admin/users');
+        const data = await api('/admin/users?pageSize=100');
         content.innerHTML = `
             <h3 style="margin-bottom:16px;font-size:18px">用户管理</h3>
             <div class="admin-toolbar">
@@ -900,17 +935,18 @@ async function loadAdminUsers() {
             </div>
             <div class="admin-table">
                 <table>
-                    <thead><tr><th>ID</th><th>用户名</th><th>手机</th><th>QQ</th><th>余额</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+                    <thead><tr><th>ID</th><th>用户名</th><th>手机</th><th>QQ</th><th>代理等级</th><th>余额</th><th>状态</th><th>操作</th></tr></thead>
                     <tbody>
                         ${data.users.map(u => `<tr>
                             <td>${u.id}</td>
                             <td>${u.username}</td>
                             <td>${u.phone || '-'}</td>
                             <td>${u.qq || '-'}</td>
+                            <td>${getAgentLevelText(u.agent_level)}</td>
                             <td>¥${parseFloat(u.balance).toFixed(2)}</td>
-                            <td>${u.role === 'admin' ? '管理员' : '用户'}</td>
                             <td>${u.status === 1 ? '正常' : '封禁'}</td>
                             <td>
+                                <button class="btn-admin" style="padding:4px 12px;font-size:12px" onclick="editUser(${u.id})">编辑</button>
                                 <button class="btn-admin success" style="padding:4px 12px;font-size:12px" onclick="adminAddBalance(${u.id})">充值</button>
                                 <button class="btn-admin ${u.status === 1 ? 'danger' : 'success'}" style="padding:4px 12px;font-size:12px" onclick="adminToggleUser(${u.id}, ${u.status === 1 ? 0 : 1})">${u.status === 1 ? '封禁' : '解封'}</button>
                             </td>
@@ -918,9 +954,71 @@ async function loadAdminUsers() {
                     </tbody>
                 </table>
             </div>
+            <div id="userFormContainer"></div>
         `;
     } catch (err) {
         content.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+function getAgentLevelText(level) {
+    const lv = parseInt(level) || 0;
+    if (lv === 1) return '<span style="color:#cd7f32">铜牌代理</span>';
+    if (lv === 2) return '<span style="color:#c0c0c0">银牌代理</span>';
+    if (lv === 3) return '<span style="color:#ffd700">金牌代理</span>';
+    return '普通用户';
+}
+
+function editUser(id) {
+    const data = api('/admin/users?pageSize=100').then(d => {
+        const user = d.users.find(u => u.id === id);
+        if (!user) { showToast('用户不存在', 'error'); return; }
+        const container = $('userFormContainer');
+        container.innerHTML = `
+            <div class="modal-overlay" style="display:flex;position:fixed;z-index:3000">
+                <div class="modal-box" style="max-width:480px">
+                    <button class="modal-close" onclick="container.innerHTML=''">&times;</button>
+                    <h2>编辑用户</h2>
+                    <div class="admin-form-group"><label>用户名</label><input type="text" id="editUsername" value="${user.username}"></div>
+                    <div class="admin-form-group"><label>手机号</label><input type="text" id="editPhone" value="${user.phone || ''}"></div>
+                    <div class="admin-form-group"><label>QQ号</label><input type="text" id="editQQ" value="${user.qq || ''}"></div>
+                    <div class="admin-form-group">
+                        <label>代理等级</label>
+                        <select id="editAgentLevel" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px">
+                            <option value="0" ${user.agent_level == 0 ? 'selected' : ''}>普通用户</option>
+                            <option value="1" ${user.agent_level == 1 ? 'selected' : ''}>铜牌代理</option>
+                            <option value="2" ${user.agent_level == 2 ? 'selected' : ''}>银牌代理</option>
+                            <option value="3" ${user.agent_level == 3 ? 'selected' : ''}>金牌代理</option>
+                        </select>
+                    </div>
+                    <div class="admin-form-group">
+                        <label>账号状态</label>
+                        <select id="editStatus" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px">
+                            <option value="1" ${user.status == 1 ? 'selected' : ''}>正常</option>
+                            <option value="0" ${user.status == 0 ? 'selected' : ''}>封禁</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary btn-full" onclick="saveUserEdit(${user.id})">保存</button>
+                </div>
+            </div>
+        `;
+    });
+}
+
+async function saveUserEdit(id) {
+    try {
+        await api(`/admin/users/${id}`, 'PUT', {
+            username: $('editUsername').value.trim(),
+            phone: $('editPhone').value.trim(),
+            qq: $('editQQ').value.trim(),
+            agent_level: parseInt($('editAgentLevel').value),
+            status: parseInt($('editStatus').value)
+        });
+        showToast('保存成功', 'success');
+        $('userFormContainer').innerHTML = '';
+        loadAdminUsers();
+    } catch (err) {
+        showToast(err.message, 'error');
     }
 }
 
@@ -1027,9 +1125,14 @@ function showProductForm(product = null) {
                 <h2>${product ? '编辑商品' : '添加商品'}</h2>
                 <div class="admin-form-group"><label>标题</label><input type="text" id="prodTitle" value="${product?.title || ''}"></div>
                 <div class="admin-form-group"><label>描述</label><textarea id="prodDesc" rows="2">${product?.description || ''}</textarea></div>
-                <div class="admin-form-group"><label>价格</label><input type="number" step="0.0001" id="prodPrice" value="${product?.price || ''}"></div>
+                <div class="admin-form-group"><label>普通价格</label><input type="number" step="0.0001" id="prodPrice" value="${product?.price || ''}"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                    <div class="admin-form-group"><label>铜牌代理价</label><input type="number" step="0.0001" id="prodBronzePrice" value="${product?.bronze_price || ''}"></div>
+                    <div class="admin-form-group"><label>银牌代理价</label><input type="number" step="0.0001" id="prodSilverPrice" value="${product?.silver_price || ''}"></div>
+                    <div class="admin-form-group"><label>金牌代理价</label><input type="number" step="0.0001" id="prodGoldPrice" value="${product?.gold_price || ''}"></div>
+                </div>
                 <div class="admin-form-group"><label>原价</label><input type="number" step="0.01" id="prodOrigPrice" value="${product?.original_price || ''}"></div>
-                <div class="admin-form-group"><label>分类</label><input type="text" id="prodCategory" value="${product?.category || '常用'}"></div>
+                <div class="admin-form-group"><label>分类</label><input type="text" id="prodCategory" value="${product?.category || '其他网课'}"></div>
                 <div class="admin-form-group"><label>库存</label><input type="number" id="prodStock" value="${product?.stock || 999999}"></div>
                 <div class="admin-form-group"><label>商品图片</label>
                     ${createImageUploader('prodImage', 'prodImagePreview', product?.image || '')}
@@ -1050,12 +1153,15 @@ async function saveProduct(id) {
         description: $('prodDesc').value.trim(),
         price: parseFloat($('prodPrice').value),
         originalPrice: $('prodOrigPrice').value ? parseFloat($('prodOrigPrice').value) : null,
-        category: $('prodCategory').value.trim() || '常用',
+        category: $('prodCategory').value.trim() || '其他网课',
         stock: parseInt($('prodStock').value) || 999999,
         image: $('prodImage').value.trim(),
         isHot: $('prodHot').checked,
         isNew: $('prodNew').checked,
-        status: 1
+        status: 1,
+        bronze_price: $('prodBronzePrice').value ? parseFloat($('prodBronzePrice').value) : null,
+        silver_price: $('prodSilverPrice').value ? parseFloat($('prodSilverPrice').value) : null,
+        gold_price: $('prodGoldPrice').value ? parseFloat($('prodGoldPrice').value) : null,
     };
     if (!data.title || !data.price) { showToast('请填写标题和价格', 'error'); return; }
     try {
@@ -1452,6 +1558,20 @@ async function loadAdminSiteSettings() {
                     <label>底部版权文字</label>
                     <input type="text" id="siteFooter" value="${s.footer_text || ''}" placeholder="一屿文化出品">
                 </div>
+                <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+                <h4 style="margin-bottom:16px">维护模式</h4>
+                <div class="admin-form-group" style="display:flex;align-items:center;gap:12px">
+                    <label><input type="checkbox" id="maintenanceMode" ${s.maintenance_mode ? 'checked' : ''}> 开启维护模式</label>
+                    <span style="color:#999;font-size:12px">开启后用户端将显示维护弹窗</span>
+                </div>
+                <div class="admin-form-group">
+                    <label>维护标题</label>
+                    <input type="text" id="maintenanceTitle" value="${s.maintenance_title || '系统维护中'}" placeholder="系统维护中">
+                </div>
+                <div class="admin-form-group">
+                    <label>维护内容</label>
+                    <textarea id="maintenanceContent" rows="3" placeholder="系统正在维护升级中...">${s.maintenance_content || ''}</textarea>
+                </div>
                 <div style="margin-top:20px">
                     <button class="btn-admin btn-primary" onclick="saveSiteSettings()">保存设置</button>
                 </div>
@@ -1470,10 +1590,118 @@ async function saveSiteSettings() {
             service_phone: $('sitePhone').value.trim(),
             service_qq: $('siteQQ').value.trim(),
             footer_text: $('siteFooter').value.trim(),
+            maintenance_mode: $('maintenanceMode').checked ? 1 : 0,
+            maintenance_title: $('maintenanceTitle').value.trim(),
+            maintenance_content: $('maintenanceContent').value.trim(),
         });
         showToast('保存成功', 'success');
     } catch (err) {
         showToast(err.message, 'error');
+    }
+}
+
+// ===== 消息群发 =====
+async function loadAdminMessages() {
+    const content = $('adminContent');
+    content.innerHTML = `
+        <h3 style="margin-bottom:20px;font-size:18px">消息群发</h3>
+        <div class="admin-form">
+            <div class="admin-form-group">
+                <label>消息标题</label>
+                <input type="text" id="broadcastTitle" placeholder="请输入消息标题">
+            </div>
+            <div class="admin-form-group">
+                <label>消息内容</label>
+                <textarea id="broadcastContent" rows="6" placeholder="请输入消息内容"></textarea>
+            </div>
+            <div style="color:#999;font-size:12px;margin-bottom:16px">
+                此消息将发送给所有正常状态的用户
+            </div>
+            <button class="btn-admin btn-primary" onclick="sendBroadcast()">一键发送</button>
+        </div>
+    `;
+}
+
+async function sendBroadcast() {
+    const title = $('broadcastTitle').value.trim();
+    const content = $('broadcastContent').value.trim();
+    if (!title || !content) { showToast('请填写标题和内容', 'error'); return; }
+    if (!confirm('确定要向所有用户发送这条消息吗？')) return;
+    try {
+        const result = await api('/admin/messages/broadcast', 'POST', { title, content });
+        showToast(`发送成功，共发送给 ${result.sent_count} 位用户`, 'success');
+        $('broadcastTitle').value = '';
+        $('broadcastContent').value = '';
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// ===== 数据备份 =====
+async function loadAdminBackup() {
+    const content = $('adminContent');
+    content.innerHTML = `
+        <h3 style="margin-bottom:20px;font-size:18px">数据备份</h3>
+        <div class="admin-form">
+            <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px">
+                <p style="color:#0369a1;margin:0 0 8px 0"><strong>数据备份说明</strong></p>
+                <p style="color:#0369a1;font-size:13px;margin:0">
+                    备份包含：商品、分类、Banner、公告、卡密、QQ群、充值套餐、支付设置、站点设置、订单、用户（不含密码）、充值记录等全部数据。<br>
+                    建议每次更新代码前先备份，更新后恢复数据。
+                </p>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                <div style="border:1px solid #eee;border-radius:8px;padding:20px">
+                    <h4 style="margin-bottom:12px">导出备份</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:16px">将全站数据导出为JSON文件，保存到本地</p>
+                    <button class="btn-admin btn-primary" onclick="exportBackup()">导出备份文件</button>
+                </div>
+                <div style="border:1px solid #eee;border-radius:8px;padding:20px">
+                    <h4 style="margin-bottom:12px">恢复备份</h4>
+                    <p style="color:#666;font-size:13px;margin-bottom:16px">从备份文件恢复数据（商品等配置会覆盖，用户和订单只追加）</p>
+                    <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="importBackup(event)">
+                    <label class="btn-admin" style="display:inline-block;cursor:pointer" onclick="$('restoreFile').click()">选择备份文件</label>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function exportBackup() {
+    try {
+        showToast('正在生成备份...', 'info');
+        const result = await api('/admin/backup');
+        // 下载文件
+        const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.filename || 'backup.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('备份导出成功', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function importBackup(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!confirm('确定要恢复数据吗？商品等配置数据将被覆盖！')) {
+        event.target.value = '';
+        return;
+    }
+    try {
+        showToast('正在恢复数据...', 'info');
+        const text = await file.text();
+        const data = JSON.parse(text);
+        await api('/admin/restore', 'POST', { data });
+        showToast('数据恢复成功', 'success');
+        event.target.value = '';
+    } catch (err) {
+        showToast('恢复失败：' + err.message, 'error');
+        event.target.value = '';
     }
 }
 
@@ -1505,11 +1733,44 @@ async function init() {
     handleQQCallback();
     initBanner();
     await checkLogin();
+    await checkMaintenanceMode();
     loadAnnouncements();
     loadCategories();
     loadProducts();
     loadQQGroups();
     navigate('home');
+}
+
+async function checkMaintenanceMode() {
+    try {
+        const data = await api('/site-settings');
+        const s = data.settings || {};
+        if (s.maintenance_mode && currentUser?.role !== 'admin') {
+            showMaintenanceModal(s.maintenance_title || '系统维护中', s.maintenance_content || '系统正在维护升级中，请稍后再试。');
+        }
+    } catch {}
+}
+
+function showMaintenanceModal(title, content) {
+    const existing = $('maintenanceModal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'maintenanceModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999';
+    modal.innerHTML = `
+        <div style="background:#fff;border-radius:16px;padding:32px;max-width:400px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+            <div style="width:64px;height:64px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+            </div>
+            <h2 style="margin:0 0 12px 0;font-size:20px;color:#333">${title}</h2>
+            <p style="margin:0 0 24px 0;color:#666;line-height:1.6">${content}</p>
+            <button onclick="this.closest('#maintenanceModal').remove()" style="padding:10px 32px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">我知道了</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
 }
 
 init();

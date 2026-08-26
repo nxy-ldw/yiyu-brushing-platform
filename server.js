@@ -236,22 +236,29 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     const qty = quantity || 1;
     const product = store.findOne('products', { id: parseInt(productId), status: 1 });
     if (!product) return res.status(400).json({ error: '商品不存在或已下架' });
-
-    const total = parseFloat(product.price) * qty;
     const user = store.findOne('users', { id: req.user.id });
+    
+    // 根据代理等级计算价格
+    const agentLevel = user.agent_level || 0;
+    let unitPrice = parseFloat(product.price);
+    if (agentLevel === 1 && product.bronze_price) unitPrice = parseFloat(product.bronze_price);
+    else if (agentLevel === 2 && product.silver_price) unitPrice = parseFloat(product.silver_price);
+    else if (agentLevel === 3 && product.gold_price) unitPrice = parseFloat(product.gold_price);
+
+    const total = unitPrice * qty;
     if (parseFloat(user.balance) < total) return res.status(400).json({ error: '余额不足，请先充值' });
 
     const orderNo = generateOrderNo();
     const order = store.insert('orders', {
       order_no: orderNo, user_id: req.user.id, product_id: parseInt(productId),
-      product_title: product.title, price: product.price, quantity: qty, total,
+      product_title: product.title, price: unitPrice, quantity: qty, total,
       account, password_hint: passwordHint || '', remark: remark || '',
-      status: 'paid', progress: 'processing'
+      status: 'paid', progress: 'processing', agent_level: agentLevel
     });
 
     store.update('users', { id: req.user.id }, { balance: { $inc: -total } });
     store.update('products', { id: parseInt(productId) }, { sales: { $inc: qty } });
-    store.insert('messages', { user_id: req.user.id, title: '下单成功', content: `您的订单 ${orderNo} 已创建，商品：${product.title}，金额：${total.toFixed(4)}元`, type: 'order', is_read: false });
+    store.insert('messages', { user_id: req.user.id, title: '下单成功', content: `您的订单 ${orderNo} 已创建，商品：${product.title}，金额：${total.toFixed(4)}元`, type: 'order', is_read: 0, created_at: new Date().toISOString() });
 
     res.json({ order });
   } catch (err) {
@@ -517,10 +524,32 @@ app.post('/api/admin/users/:id/balance', authMiddleware, adminMiddleware, async 
   }
 });
 
+// 编辑用户信息
+app.put('/api/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { username, phone, qq, agent_level, status } = req.body;
+    const updates = { updated_at: new Date().toISOString() };
+    if (username !== undefined) updates.username = username;
+    if (phone !== undefined) updates.phone = phone;
+    if (qq !== undefined) updates.qq = qq;
+    if (agent_level !== undefined) updates.agent_level = parseInt(agent_level) || 0;
+    if (status !== undefined) updates.status = status;
+    store.update('users', { id: parseInt(req.params.id) }, updates);
+    const user = store.findOne('users', { id: parseInt(req.params.id) });
+    if (user) delete user.password;
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: '更新失败' });
+  }
+});
+
 app.get('/api/admin/products', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { page = 1, pageSize = 20 } = req.query;
-    const result = store.findMany('products', {}, { sort: { created_at: 'desc' }, limit: parseInt(pageSize), offset: (parseInt(page) - 1) * parseInt(pageSize) });
+    const { page = 1, pageSize = 100, keyword, category } = req.query;
+    const conditions = {};
+    if (keyword) conditions.title = { $like: keyword };
+    if (category) conditions.category = category;
+    const result = store.findMany('products', conditions, { sort: { created_at: 'desc' }, limit: parseInt(pageSize), offset: (parseInt(page) - 1) * parseInt(pageSize) });
     res.json({ products: result.rows, total: result.total });
   } catch (err) {
     res.status(500).json({ error: '获取商品列表失败' });
@@ -529,11 +558,12 @@ app.get('/api/admin/products', authMiddleware, adminMiddleware, async (req, res)
 
 app.post('/api/admin/products', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { title, description, price, originalPrice, image, category, stock, isHot, isNew } = req.body;
+    const { title, description, price, originalPrice, image, category, stock, isHot, isNew, bronze_price, silver_price, gold_price } = req.body;
     const product = store.insert('products', {
       title, description: description || '', price, original_price: originalPrice || null,
       image: image || '', category: category || '常用', stock: stock || 999999,
-      is_hot: isHot || false, is_new: isNew || false, sort_order: 0, status: 1
+      is_hot: isHot || false, is_new: isNew || false, sort_order: 0, status: 1,
+      bronze_price: bronze_price || null, silver_price: silver_price || null, gold_price: gold_price || null
     });
     res.json({ product });
   } catch (err) {
@@ -543,12 +573,16 @@ app.post('/api/admin/products', authMiddleware, adminMiddleware, async (req, res
 
 app.put('/api/admin/products/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { title, description, price, originalPrice, image, category, stock, isHot, isNew, status } = req.body;
-    store.update('products', { id: parseInt(req.params.id) }, {
+    const { title, description, price, originalPrice, image, category, stock, isHot, isNew, status, bronze_price, silver_price, gold_price } = req.body;
+    const updates = {
       title, description: description || '', price, original_price: originalPrice || null,
       image: image || '', category: category || '常用', stock: stock || 999999,
       is_hot: isHot || false, is_new: isNew || false, status: status || 1
-    });
+    };
+    if (bronze_price !== undefined) updates.bronze_price = bronze_price;
+    if (silver_price !== undefined) updates.silver_price = silver_price;
+    if (gold_price !== undefined) updates.gold_price = gold_price;
+    store.update('products', { id: parseInt(req.params.id) }, updates);
     const product = store.findOne('products', { id: parseInt(req.params.id) });
     res.json({ product });
   } catch (err) {
@@ -764,13 +798,16 @@ app.get('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req,
 
 app.put('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { site_name, site_desc, service_phone, service_qq, footer_text } = req.body;
+    const { site_name, site_desc, service_phone, service_qq, footer_text, maintenance_mode, maintenance_title, maintenance_content } = req.body;
     const updates = { updated_at: new Date().toISOString() };
     if (site_name !== undefined) updates.site_name = site_name;
     if (site_desc !== undefined) updates.site_desc = site_desc;
     if (service_phone !== undefined) updates.service_phone = service_phone;
     if (service_qq !== undefined) updates.service_qq = service_qq;
     if (footer_text !== undefined) updates.footer_text = footer_text;
+    if (maintenance_mode !== undefined) updates.maintenance_mode = maintenance_mode ? 1 : 0;
+    if (maintenance_title !== undefined) updates.maintenance_title = maintenance_title;
+    if (maintenance_content !== undefined) updates.maintenance_content = maintenance_content;
 
     const existing = store.findOne('site_settings', { id: 1 });
     if (existing) {
@@ -781,7 +818,166 @@ app.put('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req,
     const settings = store.findOne('site_settings', { id: 1 });
     res.json({ settings });
   } catch (err) {
+    console.error('Update site settings error:', err);
     res.status(500).json({ error: '更新站点设置失败' });
+  }
+});
+
+// ===== 数据备份/导出 =====
+app.get('/api/admin/backup', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const data = store.getData();
+    // 移除用户密码
+    const safeData = { ...data };
+    if (safeData.users) {
+      safeData.users = safeData.users.map(u => {
+        const { password, ...rest } = u;
+        return rest;
+      });
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    res.setHeader('Content-Disposition', `attachment; filename="backup_${timestamp}.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json({ success: true, data: safeData, filename: `backup_${timestamp}.json` });
+  } catch (err) {
+    console.error('Backup error:', err);
+    res.status(500).json({ error: '备份失败' });
+  }
+});
+
+// 数据恢复/导入
+app.post('/api/admin/restore', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { data } = req.body;
+    if (!data || typeof data !== 'object') return res.status(400).json({ error: '数据格式错误' });
+    
+    const tables = ['products', 'categories', 'banners', 'announcements', 'card_keys', 
+                    'qq_groups', 'recharge_packages', 'pay_settings', 'site_settings',
+                    'group_buys', 'red_packets'];
+    
+    for (const table of tables) {
+      if (data[table] && Array.isArray(data[table])) {
+        // 清空表并重新插入
+        store.remove(table, {});
+        for (const row of data[table]) {
+          store.insert(table, row);
+        }
+      }
+    }
+    
+    // 用户数据只补充不覆盖（避免密码丢失）
+    if (data.users && Array.isArray(data.users)) {
+      for (const u of data.users) {
+        const existing = store.findOne('users', { id: u.id });
+        if (!existing) {
+          store.insert('users', u);
+        }
+      }
+    }
+    
+    // 订单数据追加
+    if (data.orders && Array.isArray(data.orders)) {
+      for (const o of data.orders) {
+        const existing = store.findOne('orders', { id: o.id });
+        if (!existing) store.insert('orders', o);
+      }
+    }
+    
+    // 充值记录追加
+    if (data.recharges && Array.isArray(data.recharges)) {
+      for (const r of data.recharges) {
+        const existing = store.findOne('recharges', { id: r.id });
+        if (!existing) store.insert('recharges', r);
+      }
+    }
+    
+    res.json({ success: true, message: '数据恢复成功' });
+  } catch (err) {
+    console.error('Restore error:', err);
+    res.status(500).json({ error: '恢复失败' });
+  }
+});
+
+// ===== 站内消息 - 群发 =====
+app.post('/api/admin/messages/broadcast', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { title, content } = req.body;
+    if (!title || !content) return res.status(400).json({ error: '标题和内容不能为空' });
+    
+    // 获取所有启用的用户
+    const users = store.findMany('users', { status: 1 }, { limit: 9999 });
+    let count = 0;
+    for (const user of users.rows) {
+      store.insert('messages', {
+        user_id: user.id,
+        title,
+        content,
+        type: 'system',
+        is_read: 0,
+        created_at: new Date().toISOString()
+      });
+      count++;
+    }
+    res.json({ success: true, sent_count: count });
+  } catch (err) {
+    console.error('Broadcast error:', err);
+    res.status(500).json({ error: '发送失败' });
+  }
+});
+
+// 用户消息列表
+app.get('/api/messages', authMiddleware, async (req, res) => {
+  try {
+    const { page = 1, pageSize = 20 } = req.query;
+    const result = store.findMany('messages', { user_id: req.user.id }, 
+      { sort: { created_at: 'desc' }, limit: parseInt(pageSize), offset: (parseInt(page) - 1) * parseInt(pageSize) });
+    res.json({ messages: result.rows, total: result.total });
+  } catch (err) {
+    res.status(500).json({ error: '获取消息失败' });
+  }
+});
+
+// 标记消息已读
+app.post('/api/messages/:id/read', authMiddleware, async (req, res) => {
+  try {
+    store.update('messages', { id: parseInt(req.params.id), user_id: req.user.id }, { is_read: 1 });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: '操作失败' });
+  }
+});
+
+// 未读消息数
+app.get('/api/messages/unread-count', authMiddleware, async (req, res) => {
+  try {
+    const count = store.count('messages', { user_id: req.user.id, is_read: 0 });
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ error: '获取失败' });
+  }
+});
+
+// 用户订单列表
+app.get('/api/user/orders', authMiddleware, async (req, res) => {
+  try {
+    const { page = 1, pageSize = 20 } = req.query;
+    const result = store.findMany('orders', { user_id: req.user.id },
+      { sort: { created_at: 'desc' }, limit: parseInt(pageSize), offset: (parseInt(page) - 1) * parseInt(pageSize) });
+    res.json({ orders: result.rows, total: result.total });
+  } catch (err) {
+    res.status(500).json({ error: '获取订单失败' });
+  }
+});
+
+// 用户充值记录
+app.get('/api/user/recharges', authMiddleware, async (req, res) => {
+  try {
+    const { page = 1, pageSize = 20 } = req.query;
+    const result = store.findMany('recharges', { user_id: req.user.id },
+      { sort: { created_at: 'desc' }, limit: parseInt(pageSize), offset: (parseInt(page) - 1) * parseInt(pageSize) });
+    res.json({ recharges: result.rows, total: result.total });
+  } catch (err) {
+    res.status(500).json({ error: '获取记录失败' });
   }
 });
 

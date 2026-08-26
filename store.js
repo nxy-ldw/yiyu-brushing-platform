@@ -182,14 +182,10 @@ function initData() {
   if (data.categories.length === 0) {
     const cats = [
       { name: '全部', icon: '', sort_order: 0, status: 1 },
-      { name: '常用', icon: '', sort_order: 1, status: 1 },
-      { name: '学习通', icon: '', sort_order: 2, status: 1 },
-      { name: '知到/智慧树', icon: '', sort_order: 3, status: 1 },
-      { name: '智慧职教', icon: '', sort_order: 4, status: 1 },
-      { name: 'U校园', icon: '', sort_order: 5, status: 1 },
-      { name: '其他网课', icon: '', sort_order: 6, status: 1 },
-      { name: '点赞关注', icon: '', sort_order: 7, status: 1 },
-      { name: '客服QQ群', icon: '', sort_order: 8, status: 1 },
+      { name: '学习通', icon: '', sort_order: 1, status: 1 },
+      { name: '其他网课', icon: '', sort_order: 2, status: 1 },
+      { name: '点赞关注', icon: '', sort_order: 3, status: 1 },
+      { name: '客服QQ群', icon: '', sort_order: 4, status: 1 },
     ];
     for (const c of cats) insert('categories', c);
   }
@@ -298,6 +294,9 @@ function initData() {
       service_phone: '17712328993',
       service_qq: '2947543703',
       footer_text: '一屿文化出品',
+      maintenance_mode: 0,
+      maintenance_title: '系统维护中',
+      maintenance_content: '系统正在维护升级中，请稍后再试。如有紧急问题请联系客服。',
       updated_at: new Date().toISOString(),
     });
   }
