@@ -4,3 +4,9 @@ node_modules/
 .DS_Store
 dist/
 build/
+.railway/
+download-railway.js
+railway-api-deploy.js
+railway-deploy.js
+railway-run.bat
+set-env-vars.ps1
