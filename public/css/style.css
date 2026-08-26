@@ -310,6 +310,42 @@ img{max-width:100%;display:block}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ===== 响应式 ===== */
+/* ===== 支付页面 ===== */
+.pay-page .pay-box{max-width:500px;margin:0 auto;background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,0.08);padding:40px;text-align:center}
+.pay-amount{margin-bottom:24px}
+.pay-amount span{font-size:14px;color:#999;display:block;margin-bottom:8px}
+.pay-amount-num{font-size:48px;font-weight:700;color:var(--primary)}
+.pay-amount-num span{display:inline;font-size:20px;color:var(--primary);font-weight:500;margin-left:4px}
+.pay-method-tabs{display:flex;gap:12px;margin-bottom:24px}
+.pay-method-tab{flex:1;padding:14px;border:2px solid var(--border);border-radius:12px;background:#fff;font-size:15px;font-weight:500;color:#666;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.pay-method-tab:hover{border-color:var(--primary);color:var(--primary)}
+.pay-method-tab.active{border-color:var(--primary);background:linear-gradient(135deg,rgba(102,126,234,0.1),rgba(118,75,162,0.1));color:var(--primary)}
+.pay-qr-container{width:220px;height:220px;margin:0 auto 16px;border:1px solid #eee;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#fafafa;overflow:hidden}
+.pay-qr-img{width:100%;height:100%;object-fit:cover}
+.pay-qr-placeholder{color:#bbb;text-align:center}
+.pay-qr-placeholder svg{opacity:.4}
+.pay-qr-placeholder p{font-size:14px;margin-top:12px}
+.pay-tip{font-size:14px;color:#666;margin-bottom:24px}
+.pay-actions{display:flex;gap:12px}
+.pay-actions .btn-secondary,.pay-actions .btn-primary{flex:1}
+
+/* ===== 支付成功页 ===== */
+.pay-success-page{text-align:center;padding:60px 20px}
+.success-icon{width:100px;height:100px;margin:0 auto 24px;color:#10b981;background:linear-gradient(135deg,rgba(16,185,129,0.1),rgba(16,185,129,0.2));border-radius:50%;display:flex;align-items:center;justify-content:center;animation:successPulse .6s ease-out}
+@keyframes successPulse{0%{transform:scale(0);opacity:0}50%{transform:scale(1.2)}100%{transform:scale(1);opacity:1}}
+.success-title{font-size:28px;font-weight:700;color:#333;margin-bottom:12px}
+.success-content{font-size:15px;color:#666;line-height:1.8;margin-bottom:32px;max-width:500px;margin-left:auto;margin-right:auto}
+.success-actions{display:flex;gap:12px;justify-content:center;max-width:400px;margin:0 auto}
+.success-actions .btn-secondary,.success-actions .btn-primary{flex:1}
+
+/* ===== 后台表单 ===== */
+.admin-form{max-width:700px}
+.admin-form hr{border:none;border-top:1px solid #eee;margin:24px 0}
+.admin-form h4{font-size:16px;margin-bottom:16px;color:#333}
+
+.btn-secondary{padding:10px 24px;border:1px solid var(--border);border-radius:var(--radius-md);background:#fff;color:#666;font-size:14px;cursor:pointer;transition:all .2s}
+.btn-secondary:hover{border-color:var(--primary);color:var(--primary)}
+
 @media (max-width:768px){
     .nav-menu{display:none}
     .nav-menu.show{display:flex;flex-direction:column;position:absolute;top:var(--header-h);left:0;right:0;background:#fff;padding:16px;gap:4px;box-shadow:var(--shadow-lg)}

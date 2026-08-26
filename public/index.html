@@ -240,6 +240,63 @@
                 </div>
             </div>
 
+            <!-- 支付页 -->
+            <div class="page" id="page-pay" style="display:none;">
+                <div class="page-container pay-page">
+                    <h2 class="page-title" id="payPageTitle">扫码支付</h2>
+                    <div class="pay-box">
+                        <div class="pay-amount">
+                            <span>支付金额</span>
+                            <div class="pay-amount-num"><span id="payAmount">0</span> 元</div>
+                        </div>
+                        <div class="pay-method-tabs">
+                            <button class="pay-method-tab active" onclick="switchPayMethod('wechat', this)">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18z"/></svg>
+                                微信支付
+                            </button>
+                            <button class="pay-method-tab" onclick="switchPayMethod('alipay', this)">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16.883 14.147c-.788-.254-1.61-.435-2.44-.533.33-.63.625-1.293.883-1.987h-3.64v-.854h4.35v-.62h-4.35V7.52h4.87v-.62h-4.87V4.78H9.766v2.12H4.896v.62h4.87v1.679H5.456v.62h4.31v.854H6.13v.62h3.636c.236.63.506 1.245.808 1.843-2.28.543-4.16 1.39-5.44 2.47-1.63 1.377-2.383 3.05-2.19 4.625.24 1.96 1.813 3.445 4.065 4.012 2.65.667 5.47.242 7.902-1.063 2.432-1.304 4.415-3.29 5.784-5.617.342-.578.65-1.18.92-1.793zm-4.862 3.546c-.815 0-1.64-.13-2.44-.378-2.32-.72-3.514-2.037-3.22-3.454.258-1.253 1.658-2.337 3.62-3.013.97-.333 1.99-.56 3.04-.67.24.54.478 1.086.71 1.635v.002c-1.057.22-2.084.543-3.08.968l-1.368.575v.61l.27-.114c.98-.43 2.01-.75 3.06-.96.22.55.44 1.09.67 1.63l-.022.007c-.83.27-1.68.4-2.54.4zm7.194-7.04h-4.01v-.62h4.01v.62z"/></svg>
+                                支付宝
+                            </button>
+                        </div>
+                        <div class="pay-qr-container" id="payQrContainer">
+                            <div class="pay-qr-placeholder">
+                                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                                    <path d="M14 14h3v3h-3zM17 17h4M14 20h7M20 14v3"/>
+                                </svg>
+                                <p>暂无收款码</p>
+                            </div>
+                        </div>
+                        <div class="pay-tip" id="payTip">请扫描上方二维码完成支付</div>
+                        <div class="pay-actions">
+                            <button class="btn-secondary" onclick="navigate('recharge')">返回充值</button>
+                            <button class="btn-primary" onclick="confirmPaySuccess()">我已支付</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 支付成功页 -->
+            <div class="page" id="page-pay-success" style="display:none;">
+                <div class="page-container pay-success-page">
+                    <div class="success-icon">
+                        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M8 12l3 3 5-6"/>
+                        </svg>
+                    </div>
+                    <h2 class="success-title" id="paySuccessTitle">支付成功</h2>
+                    <p class="success-content" id="paySuccessContent">您的支付已提交，系统将在1-5分钟内自动到账。如长时间未到账请联系客服。</p>
+                    <div class="success-actions">
+                        <button class="btn-secondary" onclick="navigate('home')">返回首页</button>
+                        <button class="btn-primary" onclick="checkRechargeResult()">查看余额</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- 消息页 -->
             <div class="page" id="page-messages" style="display:none;">
                 <div class="page-container">
@@ -261,7 +318,9 @@
                             <a onclick="adminTab('announcements', this)">公告管理</a>
                             <a onclick="adminTab('banners', this)">Banner管理</a>
                             <a onclick="adminTab('cards', this)">卡密管理</a>
-                            <a onclick="adminTab('recharge', this)">充值管理</a>
+                            <a onclick="adminTab('qq-groups', this)">QQ群管理</a>
+                            <a onclick="adminTab('pay-settings', this)">支付设置</a>
+                            <a onclick="adminTab('site-settings', this)">站点设置</a>
                         </nav>
                     </aside>
                     <div class="admin-content" id="adminContent"></div>
@@ -278,10 +337,7 @@
                 </div>
                 <div class="footer-col">
                     <h4>客服联系</h4>
-                    <p>QQ群：818682616</p>
-                    <p>QQ群：1098134604</p>
-                    <p>QQ群：790551986</p>
-                    <p>QQ群：1065974158</p>
+                    <div id="footerQQGroups"></div>
                 </div>
                 <div class="footer-col">
                     <h4>支付说明</h4>

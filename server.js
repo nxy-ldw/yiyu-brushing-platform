@@ -338,6 +338,24 @@ app.get('/api/qq-groups', async (req, res) => {
   }
 });
 
+app.get('/api/pay-settings', async (req, res) => {
+  try {
+    const settings = store.findOne('pay_settings', { id: 1 });
+    res.json({ settings: settings || {} });
+  } catch (err) {
+    res.status(500).json({ error: '获取支付设置失败' });
+  }
+});
+
+app.get('/api/site-settings', async (req, res) => {
+  try {
+    const settings = store.findOne('site_settings', { id: 1 });
+    res.json({ settings: settings || {} });
+  } catch (err) {
+    res.status(500).json({ error: '获取站点设置失败' });
+  }
+});
+
 app.get('/api/messages', authMiddleware, async (req, res) => {
   try {
     const result = store.findMany('messages', { user_id: req.user.id }, { sort: { created_at: 'desc' } });
@@ -602,6 +620,128 @@ app.get('/api/admin/cards', authMiddleware, adminMiddleware, async (req, res) =>
     res.json({ cards });
   } catch (err) {
     res.status(500).json({ error: '获取卡密失败' });
+  }
+});
+
+// QQ群管理
+app.get('/api/admin/qq-groups', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const result = store.findMany('qq_groups', {}, { sort: { sort_order: 'asc' } });
+    res.json({ groups: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: '获取QQ群列表失败' });
+  }
+});
+
+app.post('/api/admin/qq-groups', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { group_no, name, sort_order } = req.body;
+    if (!group_no) return res.status(400).json({ error: '群号不能为空' });
+    const group = store.insert('qq_groups', {
+      group_no,
+      name: name || 'QQ群',
+      sort_order: sort_order || 0,
+      status: 1
+    });
+    res.json({ group });
+  } catch (err) {
+    res.status(500).json({ error: '添加QQ群失败' });
+  }
+});
+
+app.put('/api/admin/qq-groups/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { group_no, name, sort_order, status } = req.body;
+    const updates = {};
+    if (group_no !== undefined) updates.group_no = group_no;
+    if (name !== undefined) updates.name = name;
+    if (sort_order !== undefined) updates.sort_order = sort_order;
+    if (status !== undefined) updates.status = status;
+    store.update('qq_groups', { id: parseInt(req.params.id) }, updates);
+    const group = store.findOne('qq_groups', { id: parseInt(req.params.id) });
+    res.json({ group });
+  } catch (err) {
+    res.status(500).json({ error: '更新QQ群失败' });
+  }
+});
+
+app.delete('/api/admin/qq-groups/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    store.remove('qq_groups', { id: parseInt(req.params.id) });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: '删除失败' });
+  }
+});
+
+// 支付设置管理
+app.get('/api/admin/pay-settings', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const settings = store.findOne('pay_settings', { id: 1 });
+    res.json({ settings: settings || {} });
+  } catch (err) {
+    res.status(500).json({ error: '获取支付设置失败' });
+  }
+});
+
+app.put('/api/admin/pay-settings', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { wechat_qr, alipay_qr, pay_title, pay_tip, success_title, success_content, success_redirect_url, wechat_account, alipay_account } = req.body;
+    const updates = { updated_at: new Date().toISOString() };
+    if (wechat_qr !== undefined) updates.wechat_qr = wechat_qr;
+    if (alipay_qr !== undefined) updates.alipay_qr = alipay_qr;
+    if (pay_title !== undefined) updates.pay_title = pay_title;
+    if (pay_tip !== undefined) updates.pay_tip = pay_tip;
+    if (success_title !== undefined) updates.success_title = success_title;
+    if (success_content !== undefined) updates.success_content = success_content;
+    if (success_redirect_url !== undefined) updates.success_redirect_url = success_redirect_url;
+    if (wechat_account !== undefined) updates.wechat_account = wechat_account;
+    if (alipay_account !== undefined) updates.alipay_account = alipay_account;
+
+    const existing = store.findOne('pay_settings', { id: 1 });
+    if (existing) {
+      store.update('pay_settings', { id: 1 }, updates);
+    } else {
+      store.insert('pay_settings', { id: 1, ...updates });
+    }
+    const settings = store.findOne('pay_settings', { id: 1 });
+    res.json({ settings });
+  } catch (err) {
+    console.error('Update pay settings error:', err);
+    res.status(500).json({ error: '更新支付设置失败' });
+  }
+});
+
+// 站点设置管理
+app.get('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const settings = store.findOne('site_settings', { id: 1 });
+    res.json({ settings: settings || {} });
+  } catch (err) {
+    res.status(500).json({ error: '获取站点设置失败' });
+  }
+});
+
+app.put('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { site_name, site_desc, service_phone, service_qq, footer_text } = req.body;
+    const updates = { updated_at: new Date().toISOString() };
+    if (site_name !== undefined) updates.site_name = site_name;
+    if (site_desc !== undefined) updates.site_desc = site_desc;
+    if (service_phone !== undefined) updates.service_phone = service_phone;
+    if (service_qq !== undefined) updates.service_qq = service_qq;
+    if (footer_text !== undefined) updates.footer_text = footer_text;
+
+    const existing = store.findOne('site_settings', { id: 1 });
+    if (existing) {
+      store.update('site_settings', { id: 1 }, updates);
+    } else {
+      store.insert('site_settings', { id: 1, ...updates });
+    }
+    const settings = store.findOne('site_settings', { id: 1 });
+    res.json({ settings });
+  } catch (err) {
+    res.status(500).json({ error: '更新站点设置失败' });
   }
 });
 

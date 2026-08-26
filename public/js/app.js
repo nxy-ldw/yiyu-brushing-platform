@@ -437,40 +437,91 @@ function selectRecharge(amount, bonus, el) {
     document.querySelectorAll('.recharge-package').forEach(p => p.classList.remove('selected'));
     el.classList.add('selected');
     selectedRechargeAmount = amount;
-    doRecharge(amount);
+    goToPayPage(amount, bonus);
 }
 
-async function doRecharge(amount) {
+async function goToPayPage(amount, bonus) {
     if (!currentUser) { showToast('请先登录', 'error'); return; }
     try {
         const data = await api('/recharge', 'POST', { amount });
         currentRechargeId = data.recharge.id;
-        $('rechargeInfo').innerHTML = `
-            <div style="text-align:center;padding:20px 0">
-                <div style="font-size:14px;color:#666">充值金额</div>
-                <div style="font-size:36px;font-weight:700;color:var(--primary)">${amount}元</div>
-                <div style="color:var(--accent);font-weight:600;margin-top:8px">赠送${data.recharge.bonus}元</div>
-                <div style="color:#999;font-size:14px;margin-top:4px">到账${parseFloat(amount) + parseFloat(data.recharge.bonus)}元</div>
-            </div>`;
-        $('rechargeModal').style.display = 'flex';
+        $('payAmount').textContent = amount;
+        currentPayBonus = bonus;
+        loadPayPage();
+        navigate('pay');
     } catch (err) {
         showToast(err.message, 'error');
     }
 }
 
-async function confirmRecharge() {
+let currentPayMethod = 'wechat';
+let currentPayBonus = 0;
+
+async function loadPayPage() {
+    try {
+        const data = await api('/pay-settings');
+        const settings = data.settings || {};
+        if (settings.pay_title) $('payPageTitle').textContent = settings.pay_title;
+        if (settings.pay_tip) $('payTip').textContent = settings.pay_tip;
+        updatePayQr(settings);
+    } catch {
+        updatePayQr({});
+    }
+}
+
+function switchPayMethod(method, el) {
+    currentPayMethod = method;
+    document.querySelectorAll('.pay-method-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    loadPayPage();
+}
+
+function updatePayQr(settings) {
+    const container = $('payQrContainer');
+    const qrUrl = currentPayMethod === 'wechat' ? settings.wechat_qr : settings.alipay_qr;
+    if (qrUrl) {
+        container.innerHTML = `<img src="${qrUrl}" class="pay-qr-img" alt="收款码">`;
+    } else {
+        container.innerHTML = `
+            <div class="pay-qr-placeholder">
+                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                    <path d="M14 14h3v3h-3zM17 17h4M14 20h7M20 14v3"/>
+                </svg>
+                <p>暂无${currentPayMethod === 'wechat' ? '微信' : '支付宝'}收款码</p>
+            </div>`;
+    }
+}
+
+async function confirmPaySuccess() {
     if (!currentRechargeId) { showToast('充值订单不存在', 'error'); return; }
     try {
         const data = await api('/recharge/confirm', 'POST', { rechargeId: currentRechargeId });
-        closeModal('rechargeModal');
         showToast(data.message, 'success');
         currentRechargeId = null;
         selectedRechargeAmount = null;
         await refreshUser();
-        loadRecharge();
+        // 跳转到支付成功页
+        try {
+            const payData = await api('/pay-settings');
+            const settings = payData.settings || {};
+            if (settings.success_title) $('paySuccessTitle').textContent = settings.success_title;
+            if (settings.success_content) $('paySuccessContent').textContent = settings.success_content;
+            if (settings.success_redirect_url) {
+                setTimeout(() => { window.location.href = settings.success_redirect_url; }, 2000);
+            }
+        } catch {}
+        navigate('pay-success');
     } catch (err) {
         showToast(err.message, 'error');
     }
+}
+
+async function checkRechargeResult() {
+    await refreshUser();
+    navigate('recharge');
 }
 
 // ===== 卡密兑换 =====
@@ -618,7 +669,129 @@ async function loadQQGroups() {
                 `).join('')}
             </div>
         `;
+        // 同时更新footer
+        const footer = $('footerQQGroups');
+        if (footer) {
+            footer.innerHTML = data.groups.map(g => `<p>QQ群：${g.group_no}</p>`).join('');
+        }
     } catch {}
+}
+
+// ===== 后台QQ群管理 =====
+async function loadAdminQQGroups() {
+    const content = $('adminContent');
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/qq-groups');
+        content.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+                <h3 style="font-size:18px">QQ群管理</h3>
+                <button class="btn-admin btn-primary" onclick="showAddQQGroup()">添加QQ群</button>
+            </div>
+            <div class="admin-table">
+                <table>
+                    <thead><tr><th>序号</th><th>群名称</th><th>群号</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
+                    <tbody>
+                        ${data.groups.map((g, i) => `
+                            <tr>
+                                <td>${i + 1}</td>
+                                <td><input type="text" value="${g.name}" id="qqg-name-${g.id}" style="width:100px;padding:4px 8px;border:1px solid #ddd;border-radius:4px"></td>
+                                <td><input type="text" value="${g.group_no}" id="qqg-no-${g.id}" style="width:120px;padding:4px 8px;border:1px solid #ddd;border-radius:4px"></td>
+                                <td><input type="number" value="${g.sort_order}" id="qqg-sort-${g.id}" style="width:60px;padding:4px 8px;border:1px solid #ddd;border-radius:4px"></td>
+                                <td>${g.status === 1 ? '<span style="color:#10b981">启用</span>' : '<span style="color:#ef4444">禁用</span>'}</td>
+                                <td>
+                                    <button class="btn-admin" onclick="saveQQGroup(${g.id})">保存</button>
+                                    <button class="btn-admin btn-danger" onclick="toggleQQGroupStatus(${g.id}, ${g.status})">${g.status === 1 ? '禁用' : '启用'}</button>
+                                    <button class="btn-admin btn-danger" onclick="deleteQQGroup(${g.id})">删除</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = `<div style="text-align:center;padding:40px;color:#f5576c">加载失败：${err.message}</div>`;
+    }
+}
+
+function showAddQQGroup() {
+    const content = $('adminContent');
+    const formHtml = `
+        <div style="background:var(--bg);padding:20px;border-radius:8px;margin-bottom:20px">
+            <h4 style="margin-bottom:16px">添加QQ群</h4>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+                <div>
+                    <label style="display:block;margin-bottom:6px;font-size:13px;color:#666">群名称</label>
+                    <input type="text" id="newQqgName" placeholder="如：一群" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px">
+                </div>
+                <div>
+                    <label style="display:block;margin-bottom:6px;font-size:13px;color:#666">群号</label>
+                    <input type="text" id="newQqgNo" placeholder="QQ群号" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px">
+                </div>
+                <div>
+                    <label style="display:block;margin-bottom:6px;font-size:13px;color:#666">排序</label>
+                    <input type="number" id="newQqgSort" value="0" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px">
+                </div>
+            </div>
+            <div style="margin-top:16px;text-align:right">
+                <button class="btn-admin" onclick="loadAdminQQGroups()">取消</button>
+                <button class="btn-admin btn-primary" onclick="addQQGroup()">确认添加</button>
+            </div>
+        </div>
+    `;
+    content.innerHTML = formHtml + content.innerHTML;
+}
+
+async function addQQGroup() {
+    const name = $('newQqgName').value.trim();
+    const group_no = $('newQqgNo').value.trim();
+    const sort_order = parseInt($('newQqgSort').value) || 0;
+    if (!group_no) { showToast('群号不能为空', 'error'); return; }
+    try {
+        await api('/admin/qq-groups', 'POST', { group_no, name, sort_order });
+        showToast('添加成功', 'success');
+        loadAdminQQGroups();
+        loadQQGroups();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function saveQQGroup(id) {
+    const name = $(`qqg-name-${id}`).value.trim();
+    const group_no = $(`qqg-no-${id}`).value.trim();
+    const sort_order = parseInt($(`qqg-sort-${id}`).value) || 0;
+    try {
+        await api(`/admin/qq-groups/${id}`, 'PUT', { name, group_no, sort_order });
+        showToast('保存成功', 'success');
+        loadQQGroups();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function toggleQQGroupStatus(id, currentStatus) {
+    try {
+        await api(`/admin/qq-groups/${id}`, 'PUT', { status: currentStatus === 1 ? 0 : 1 });
+        showToast('操作成功', 'success');
+        loadAdminQQGroups();
+        loadQQGroups();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function deleteQQGroup(id) {
+    if (!confirm('确定要删除这个QQ群吗？')) return;
+    try {
+        await api(`/admin/qq-groups/${id}`, 'DELETE');
+        showToast('删除成功', 'success');
+        loadAdminQQGroups();
+        loadQQGroups();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
 }
 
 // ===== 后台管理 =====
@@ -632,7 +805,9 @@ function adminTab(tab, el) {
     else if (tab === 'announcements') loadAdminAnnouncements();
     else if (tab === 'banners') loadAdminBanners();
     else if (tab === 'cards') loadAdminCards();
-    else if (tab === 'recharge') loadAdminRecharge();
+    else if (tab === 'qq-groups') loadAdminQQGroups();
+    else if (tab === 'pay-settings') loadAdminPaySettings();
+    else if (tab === 'site-settings') loadAdminSiteSettings();
 }
 
 async function loadAdmin() {
@@ -1079,24 +1254,146 @@ async function generateCards() {
     }
 }
 
-async function loadAdminRecharge() {
+async function loadAdminPaySettings() {
     const content = $('adminContent');
-    content.innerHTML = `
-        <h3 style="margin-bottom:16px;font-size:18px">充值管理</h3>
-        <p style="color:#666;margin-bottom:16px">用户充值记录和统计</p>
-        <div class="admin-table">
-            <table>
-                <thead><tr><th>充值套餐</th><th>充值金额</th><th>赠送金额</th><th>到账金额</th><th>状态</th></tr></thead>
-                <tbody>
-                    <tr><td>套餐1</td><td>10元</td><td>1元</td><td>11元</td><td>启用</td></tr>
-                    <tr><td>套餐2</td><td>30元</td><td>4元</td><td>34元</td><td>启用</td></tr>
-                    <tr><td>套餐3</td><td>50元</td><td>8元</td><td>58元</td><td>启用</td></tr>
-                    <tr><td>套餐4</td><td>100元</td><td>20元</td><td>120元</td><td>启用</td></tr>
-                    <tr><td>套餐5</td><td>500元</td><td>150元</td><td>650元</td><td>启用</td></tr>
-                </tbody>
-            </table>
-        </div>
-    `;
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/pay-settings');
+        const s = data.settings || {};
+        content.innerHTML = `
+            <h3 style="margin-bottom:20px;font-size:18px">支付设置</h3>
+            <div class="admin-form">
+                <div class="admin-form-group">
+                    <label>支付页面标题</label>
+                    <input type="text" id="paySetTitle" value="${s.pay_title || ''}" placeholder="扫码支付">
+                </div>
+                <div class="admin-form-group">
+                    <label>支付提示语</label>
+                    <input type="text" id="paySetTip" value="${s.pay_tip || ''}" placeholder="请扫描下方二维码完成支付">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                    <div class="admin-form-group">
+                        <label>微信收款码图片URL</label>
+                        <input type="text" id="payWechatQr" value="${s.wechat_qr || ''}" placeholder="微信收款码图片链接">
+                        <div style="margin-top:10px;min-height:150px;border:1px dashed #ddd;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fafafa">
+                            ${s.wechat_qr ? `<img src="${s.wechat_qr}" style="max-width:140px;max-height:140px">` : '<span style="color:#999;font-size:13px">预览</span>'}
+                        </div>
+                    </div>
+                    <div class="admin-form-group">
+                        <label>支付宝收款码图片URL</label>
+                        <input type="text" id="payAlipayQr" value="${s.alipay_qr || ''}" placeholder="支付宝收款码图片链接">
+                        <div style="margin-top:10px;min-height:150px;border:1px dashed #ddd;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fafafa">
+                            ${s.alipay_qr ? `<img src="${s.alipay_qr}" style="max-width:140px;max-height:140px">` : '<span style="color:#999;font-size:13px">预览</span>'}
+                        </div>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                    <div class="admin-form-group">
+                        <label>微信收款账号（选填）</label>
+                        <input type="text" id="payWechatAccount" value="${s.wechat_account || ''}" placeholder="微信账号">
+                    </div>
+                    <div class="admin-form-group">
+                        <label>支付宝收款账号（选填）</label>
+                        <input type="text" id="payAlipayAccount" value="${s.alipay_account || ''}" placeholder="支付宝账号">
+                    </div>
+                </div>
+                <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+                <h4 style="margin-bottom:16px">支付成功页面设置</h4>
+                <div class="admin-form-group">
+                    <label>成功页标题</label>
+                    <input type="text" id="paySuccessTitle" value="${s.success_title || ''}" placeholder="支付成功">
+                </div>
+                <div class="admin-form-group">
+                    <label>成功页内容</label>
+                    <textarea id="paySuccessContent" rows="3" placeholder="您的支付已提交，系统将在1-5分钟内自动到账...">${s.success_content || ''}</textarea>
+                </div>
+                <div class="admin-form-group">
+                    <label>成功页跳转链接（选填，设置后支付成功将自动跳转）</label>
+                    <input type="text" id="paySuccessRedirect" value="${s.success_redirect_url || ''}" placeholder="https://...">
+                </div>
+                <div style="margin-top:20px">
+                    <button class="btn-admin btn-primary" onclick="savePaySettings()">保存设置</button>
+                </div>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = `<div style="text-align:center;padding:40px;color:#f5576c">加载失败：${err.message}</div>`;
+    }
+}
+
+async function savePaySettings() {
+    try {
+        await api('/admin/pay-settings', 'PUT', {
+            pay_title: $('paySetTitle').value.trim(),
+            pay_tip: $('paySetTip').value.trim(),
+            wechat_qr: $('payWechatQr').value.trim(),
+            alipay_qr: $('payAlipayQr').value.trim(),
+            wechat_account: $('payWechatAccount').value.trim(),
+            alipay_account: $('payAlipayAccount').value.trim(),
+            success_title: $('paySuccessTitle').value.trim(),
+            success_content: $('paySuccessContent').value.trim(),
+            success_redirect_url: $('paySuccessRedirect').value.trim(),
+        });
+        showToast('保存成功', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function loadAdminSiteSettings() {
+    const content = $('adminContent');
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/site-settings');
+        const s = data.settings || {};
+        content.innerHTML = `
+            <h3 style="margin-bottom:20px;font-size:18px">站点设置</h3>
+            <div class="admin-form">
+                <div class="admin-form-group">
+                    <label>网站名称</label>
+                    <input type="text" id="siteName" value="${s.site_name || ''}" placeholder="一屿刷课平台">
+                </div>
+                <div class="admin-form-group">
+                    <label>网站描述</label>
+                    <input type="text" id="siteDesc" value="${s.site_desc || ''}" placeholder="专业刷课服务平台">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                    <div class="admin-form-group">
+                        <label>客服电话</label>
+                        <input type="text" id="sitePhone" value="${s.service_phone || ''}" placeholder="17712328993">
+                    </div>
+                    <div class="admin-form-group">
+                        <label>客服QQ</label>
+                        <input type="text" id="siteQQ" value="${s.service_qq || ''}" placeholder="2947543703">
+                    </div>
+                </div>
+                <div class="admin-form-group">
+                    <label>底部版权文字</label>
+                    <input type="text" id="siteFooter" value="${s.footer_text || ''}" placeholder="一屿文化出品">
+                </div>
+                <div style="margin-top:20px">
+                    <button class="btn-admin btn-primary" onclick="saveSiteSettings()">保存设置</button>
+                </div>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = `<div style="text-align:center;padding:40px;color:#f5576c">加载失败：${err.message}</div>`;
+    }
+}
+
+async function saveSiteSettings() {
+    try {
+        await api('/admin/site-settings', 'PUT', {
+            site_name: $('siteName').value.trim(),
+            site_desc: $('siteDesc').value.trim(),
+            service_phone: $('sitePhone').value.trim(),
+            service_qq: $('siteQQ').value.trim(),
+            footer_text: $('siteFooter').value.trim(),
+        });
+        showToast('保存成功', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
 }
 
 // ===== 移动端菜单 =====
