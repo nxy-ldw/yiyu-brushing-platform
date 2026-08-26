@@ -1490,12 +1490,29 @@ app.post('/api/admin/restore', authMiddleware, adminMiddleware, async (req, res)
       }
     }
     
-    // 用户数据只补充不覆盖（避免密码丢失）
+    // 用户数据：恢复余额等字段，但保留原密码（如果备份里没有密码的话）
     if (data.users && Array.isArray(data.users)) {
       for (const u of data.users) {
         const existing = store.findOne('users', { id: u.id });
         if (!existing) {
           store.insert('users', u);
+        } else {
+          // 更新余额、等级等字段，密码保留原有的（如果备份里没有的话）
+          const updates = {};
+          if (u.balance !== undefined) updates.balance = u.balance;
+          if (u.principal_balance !== undefined) updates.principal_balance = u.principal_balance;
+          if (u.bonus_balance !== undefined) updates.bonus_balance = u.bonus_balance;
+          if (u.agent_level !== undefined) updates.agent_level = u.agent_level;
+          if (u.status !== undefined) updates.status = u.status;
+          if (u.phone !== undefined) updates.phone = u.phone;
+          if (u.qq !== undefined) updates.qq = u.qq;
+          if (u.nickname !== undefined) updates.nickname = u.nickname;
+          if (u.avatar !== undefined) updates.avatar = u.avatar;
+          if (u.school !== undefined) updates.school = u.school;
+          if (u.password !== undefined) updates.password = u.password; // 备份里有密码才覆盖
+          if (Object.keys(updates).length > 0) {
+            store.update('users', { id: u.id }, updates);
+          }
         }
       }
     }
@@ -1513,6 +1530,38 @@ app.post('/api/admin/restore', authMiddleware, adminMiddleware, async (req, res)
       for (const r of data.recharges) {
         const existing = store.findOne('recharges', { id: r.id });
         if (!existing) store.insert('recharges', r);
+      }
+    }
+
+    // 提现记录追加
+    if (data.withdrawals && Array.isArray(data.withdrawals)) {
+      for (const w of data.withdrawals) {
+        const existing = store.findOne('withdrawals', { id: w.id });
+        if (!existing) store.insert('withdrawals', w);
+      }
+    }
+
+    // 余额日志追加
+    if (data.balance_logs && Array.isArray(data.balance_logs)) {
+      for (const l of data.balance_logs) {
+        const existing = store.findOne('balance_logs', { id: l.id });
+        if (!existing) store.insert('balance_logs', l);
+      }
+    }
+
+    // 消息记录追加
+    if (data.messages && Array.isArray(data.messages)) {
+      for (const m of data.messages) {
+        const existing = store.findOne('messages', { id: m.id });
+        if (!existing) store.insert('messages', m);
+      }
+    }
+
+    // 红包领取记录追加
+    if (data.user_red_packets && Array.isArray(data.user_red_packets)) {
+      for (const ur of data.user_red_packets) {
+        const existing = store.findOne('user_red_packets', { id: ur.id });
+        if (!existing) store.insert('user_red_packets', ur);
       }
     }
     

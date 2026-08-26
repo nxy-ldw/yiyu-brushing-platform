@@ -2577,8 +2577,8 @@ async function loadAdminBackup() {
             <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin-bottom:20px">
                 <p style="color:#0369a1;margin:0 0 8px 0"><strong>数据备份说明</strong></p>
                 <p style="color:#0369a1;font-size:13px;margin:0">
-                    备份包含：商品、分类、Banner、公告、卡密、QQ群、充值套餐、支付设置、站点设置、订单、用户（不含密码）、充值记录等全部数据。<br>
-                    建议每次更新代码前先备份，更新后恢复数据。
+                    备份包含：商品、分类、Banner、公告、卡密、QQ群、充值套餐、支付设置、站点设置、订单、用户（含余额/不含密码）、充值记录、提现记录、余额日志等全部数据。<br>
+                    恢复时：配置类数据覆盖，用户余额/等级/状态等会同步更新，订单/充值/提现等记录只追加。
                 </p>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
