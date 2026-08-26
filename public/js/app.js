@@ -1138,7 +1138,7 @@ async function loadAdminUsersSearch() {
                             <td>${u.role === 'admin' ? '管理员' : '用户'}</td>
                             <td>${u.status === 1 ? '正常' : '封禁'}</td>
                             <td>
-                                <button class="btn-admin success" style="padding:4px 12px;font-size:12px" onclick="adminAddBalance(${u.id})">充值</button>
+                                <button class="btn-admin success" style="padding:4px 12px;font-size:12px" onclick="adminAddBalance(${u.id})">调余额</button>
                                 <button class="btn-admin ${u.status === 1 ? 'danger' : 'success'}" style="padding:4px 12px;font-size:12px" onclick="adminToggleUser(${u.id}, ${u.status === 1 ? 0 : 1})">${u.status === 1 ? '封禁' : '解封'}</button>
                             </td>
                         </tr>`).join('')}
