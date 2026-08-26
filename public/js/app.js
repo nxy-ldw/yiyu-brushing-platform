@@ -1739,39 +1739,39 @@ function showBatchPriceForm() {
                 <h2>批量改价</h2>
                 <div class="admin-form-group">
                     <label>选择分类</label>
-                    <select id="batchCategory" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
+                    <select id="batchCategory">
                         <option value="">全部分类（${products.length}个商品）</option>
                         ${categories.map(c => `<option value="${c}">${c}（${products.filter(p=>p.category===c).length}个）</option>`).join('')}
                     </select>
                 </div>
                 <div class="admin-form-group">
                     <label>改价方式</label>
-                    <div style="display:flex;gap:16px;flex-wrap:wrap">
-                        <label><input type="radio" name="priceMode" value="percent" checked> 按百分比调整</label>
-                        <label><input type="radio" name="priceMode" value="amount"> 按金额调整</label>
+                    <div style="display:flex;gap:24px;flex-wrap:wrap">
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="radio" name="priceMode" value="percent" checked style="width:auto;margin:0"> 按百分比调整</label>
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="radio" name="priceMode" value="amount" style="width:auto;margin:0"> 按金额调整</label>
                     </div>
                 </div>
                 <div class="admin-form-group">
                     <label>调整值</label>
-                    <div style="display:flex;gap:8px;align-items:stretch">
-                        <input type="number" id="batchValue" step="0.01" placeholder="例如：10" style="flex:1;height:38px;padding:0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box">
-                        <select id="batchDirection" style="height:38px;padding:0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;background:#fff">
+                    <div style="display:flex;gap:8px">
+                        <input type="number" id="batchValue" step="0.01" placeholder="例如：10" style="flex:1">
+                        <select id="batchDirection" style="width:auto;min-width:120px">
                             <option value="up">上调（+）</option>
                             <option value="down">下调（-）</option>
                         </select>
                     </div>
-                    <div style="color:#999;font-size:12px;margin-top:4px">
+                    <div style="color:#999;font-size:12px;margin-top:6px">
                         百分比模式：填10表示价格上浮10%或下调10%<br>
                         金额模式：填5表示每款商品加5元或减5元
                     </div>
                 </div>
                 <div class="admin-form-group">
                     <label>应用到哪些价格</label>
-                    <div style="display:flex;gap:16px;flex-wrap:wrap">
-                        <label><input type="checkbox" id="priceNormal" checked> 普通价格</label>
-                        <label><input type="checkbox" id="priceBronze"> 铜牌代理价</label>
-                        <label><input type="checkbox" id="priceSilver"> 银牌代理价</label>
-                        <label><input type="checkbox" id="priceGold"> 金牌代理价</label>
+                    <div style="display:flex;gap:20px;flex-wrap:wrap">
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceNormal" checked style="width:auto;margin:0"> 普通价格</label>
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceBronze" style="width:auto;margin:0"> 铜牌代理价</label>
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceSilver" style="width:auto;margin:0"> 银牌代理价</label>
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:normal;margin:0"><input type="checkbox" id="priceGold" style="width:auto;margin:0"> 金牌代理价</label>
                     </div>
                 </div>
                 <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#92400e">
