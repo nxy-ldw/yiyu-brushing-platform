@@ -1238,13 +1238,19 @@ app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, r
     if (!settings || !settings.email_enabled || !settings.smtp_host || !settings.notify_email) {
       return res.status(400).json({ error: '请先保存并开启邮件通知配置' });
     }
+    if (!settings.smtp_user || !settings.smtp_pass) {
+      return res.status(400).json({ error: '请填写SMTP账号和密码' });
+    }
 
     const nodemailer = require('nodemailer');
     const transporter = nodemailer.createTransport({
       host: settings.smtp_host,
       port: parseInt(settings.smtp_port) || 465,
       secure: parseInt(settings.smtp_port) === 465,
-      auth: { user: settings.smtp_user, pass: settings.smtp_pass }
+      auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000
     });
 
     await transporter.sendMail({
@@ -1256,8 +1262,18 @@ app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, r
 
     res.json({ success: true });
   } catch (err) {
-    console.error('测试邮件失败:', err);
-    res.status(500).json({ error: '发送失败：' + err.message });
+    console.error('测试邮件失败:', err.message);
+    let tip = err.message;
+    if (err.code === 'EAUTH' || err.message.includes('authentication')) {
+      tip = 'SMTP认证失败，请检查账号和授权码是否正确。QQ邮箱需使用"授权码"而非登录密码。';
+    } else if (err.code === 'ETIMEDOUT' || err.message.includes('timeout')) {
+      tip = '连接SMTP服务器超时，请检查服务器地址和端口是否正确。';
+    } else if (err.code === 'ENOTFOUND' || err.message.includes('getaddrinfo')) {
+      tip = '无法找到SMTP服务器，请检查服务器地址是否正确。';
+    } else if (err.code === 'ECONNREFUSED') {
+      tip = '连接被拒绝，请检查端口是否正确。';
+    }
+    res.status(500).json({ error: tip });
   }
 });
 
@@ -1288,7 +1304,10 @@ async function sendNotification(title, content) {
           host: settings.smtp_host,
           port: parseInt(settings.smtp_port) || 465,
           secure: parseInt(settings.smtp_port) === 465,
-          auth: { user: settings.smtp_user, pass: settings.smtp_pass }
+          auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 15000
         });
         await transporter.sendMail({
           from: `"刷课平台通知" <${settings.smtp_user}>`,
