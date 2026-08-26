@@ -684,8 +684,6 @@ app.get('/api/site/info', async (req, res) => {
       service_qq: settings.service_qq || '',
       footer_text: settings.footer_text || '',
       about_company: settings.about_company || '',
-      about_phone: settings.about_phone || '',
-      about_qq: settings.about_qq || '',
       payment_note: settings.payment_note || ''
     };
     res.json({ settings: publicSettings });
@@ -1255,7 +1253,7 @@ app.get('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req,
 
 app.put('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { site_name, site_desc, service_phone, service_qq, footer_text, about_company, about_phone, about_qq, payment_note, maintenance_mode, maintenance_title, maintenance_content } = req.body;
+    const { site_name, site_desc, service_phone, service_qq, footer_text, about_company, payment_note, maintenance_mode, maintenance_title, maintenance_content } = req.body;
     const updates = { updated_at: new Date().toISOString() };
     if (site_name !== undefined) updates.site_name = site_name;
     if (site_desc !== undefined) updates.site_desc = site_desc;
@@ -1263,8 +1261,6 @@ app.put('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req,
     if (service_qq !== undefined) updates.service_qq = service_qq;
     if (footer_text !== undefined) updates.footer_text = footer_text;
     if (about_company !== undefined) updates.about_company = about_company;
-    if (about_phone !== undefined) updates.about_phone = about_phone;
-    if (about_qq !== undefined) updates.about_qq = about_qq;
     if (payment_note !== undefined) updates.payment_note = payment_note;
     if (maintenance_mode !== undefined) updates.maintenance_mode = maintenance_mode ? 1 : 0;
     if (maintenance_title !== undefined) updates.maintenance_title = maintenance_title;
