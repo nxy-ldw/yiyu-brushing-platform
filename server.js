@@ -78,7 +78,7 @@ app.post('/api/auth/register', async (req, res) => {
     if (existing) return res.status(400).json({ error: '用户名已存在' });
 
     const hashedPassword = bcrypt.hashSync(password, 10);
-    const user = store.insert('users', { username, password: hashedPassword, phone: phone || '', qq: qq || '', balance: 0, role: 'user', avatar: '', status: 1 });
+    const user = store.insert('users', { username, password: hashedPassword, phone: phone || '', qq: qq || '', balance: 0, principal_balance: 0, bonus_balance: 0, role: 'user', avatar: '', status: 1 });
 
     const token = jwt.sign({ id: user.id, username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
     store.insert('messages', { user_id: user.id, title: '欢迎', content: '欢迎来到一屿刷课平台！请先充值再下单哦~', type: 'system', is_read: false });
@@ -138,7 +138,7 @@ app.get('/api/auth/qq/callback', async (req, res) => {
     if (!user) {
       const username = `QQ_${openid.slice(-6)}`;
       const hashedPassword = bcrypt.hashSync(Math.random().toString(), 10);
-      user = store.insert('users', { username, password: hashedPassword, qq: openid, avatar, balance: 0, role: 'user', status: 1 });
+      user = store.insert('users', { username, password: hashedPassword, qq: openid, avatar, balance: 0, principal_balance: 0, bonus_balance: 0, role: 'user', status: 1 });
     } else if (avatar) {
       store.update('users', { id: user.id }, { avatar });
     }
@@ -263,6 +263,18 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     const total = unitPrice * qty;
     if (parseFloat(user.balance) < total) return res.status(400).json({ error: '余额不足，请先充值' });
 
+    // 先扣本金，再扣赠送金
+    let principalDeduct = 0;
+    let bonusDeduct = 0;
+    const principal = parseFloat(user.principal_balance) || 0;
+    const bonus = parseFloat(user.bonus_balance) || 0;
+    if (principal >= total) {
+      principalDeduct = total;
+    } else {
+      principalDeduct = principal;
+      bonusDeduct = total - principal;
+    }
+
     const orderNo = generateOrderNo();
     const order = store.insert('orders', {
       order_no: orderNo, user_id: req.user.id, product_id: parseInt(productId),
@@ -272,7 +284,11 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
       status: 'paid', progress: 'processing', agent_level: agentLevel
     });
 
-    store.update('users', { id: req.user.id }, { balance: { $inc: -total } });
+    store.update('users', { id: req.user.id }, { 
+      balance: { $inc: -total },
+      principal_balance: { $inc: -principalDeduct },
+      bonus_balance: { $inc: -bonusDeduct }
+    });
     store.update('products', { id: parseInt(productId) }, { sales: { $inc: qty } });
     store.insert('messages', { user_id: req.user.id, title: '下单成功', content: `您的订单 ${orderNo} 已创建，商品：${product.title}，金额：${total.toFixed(4)}元`, type: 'order', is_read: 0, created_at: new Date().toISOString() });
 
@@ -397,7 +413,11 @@ app.post('/api/admin/recharges/:id/approve', authMiddleware, adminMiddleware, as
       approved_by: req.user.id,
       approved_at: new Date().toISOString()
     });
-    store.update('users', { id: recharge.user_id }, { balance: { $inc: totalAmount } });
+    store.update('users', { id: recharge.user_id }, { 
+      balance: { $inc: totalAmount },
+      principal_balance: { $inc: parseFloat(recharge.amount) },
+      bonus_balance: { $inc: parseFloat(recharge.bonus || 0) }
+    });
     store.insert('messages', { 
       user_id: recharge.user_id, 
       title: '充值成功', 
@@ -444,6 +464,171 @@ app.post('/api/admin/recharges/:id/reject', authMiddleware, adminMiddleware, asy
   }
 });
 
+// ===================== 提现功能 =====================
+
+const MIN_WITHDRAW = 200;
+const WITHDRAW_FEE_RATE = 0.3;
+
+// 用户：提交提现申请
+app.post('/api/withdrawals', authMiddleware, async (req, res) => {
+  try {
+    const { amount, wechat_account, wechat_name, qrcode_image, remark } = req.body;
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt < MIN_WITHDRAW) return res.status(400).json({ error: `最低提现金额为${MIN_WITHDRAW}元` });
+    if (!wechat_account) return res.status(400).json({ error: '请输入微信号' });
+    if (!wechat_name) return res.status(400).json({ error: '请输入收款人真实姓名' });
+
+    const user = store.findOne('users', { id: req.user.id });
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+
+    const principal = parseFloat(user.principal_balance) || 0;
+    if (principal < amt) return res.status(400).json({ error: '可提现余额不足（赠送金不可提现）' });
+
+    const fee = amt * WITHDRAW_FEE_RATE;
+    const actualAmount = amt - fee;
+
+    const withdrawNo = 'WD' + Date.now();
+    const withdrawal = store.insert('withdrawals', {
+      withdraw_no: withdrawNo,
+      user_id: req.user.id,
+      amount: amt,
+      fee: fee,
+      actual_amount: actualAmount,
+      wechat_account: wechat_account,
+      wechat_name: wechat_name,
+      qrcode_image: qrcode_image || '',
+      remark: remark || '',
+      status: 'pending', // pending/approved/rejected/paid
+      created_at: new Date().toISOString()
+    });
+
+    // 冻结本金（先扣除，审核拒绝则退回）
+    store.update('users', { id: req.user.id }, { 
+      balance: { $inc: -amt },
+      principal_balance: { $inc: -amt }
+    });
+
+    store.insert('messages', { 
+      user_id: req.user.id, 
+      title: '提现申请已提交', 
+      content: `您的提现申请${withdrawNo}已提交，金额${amt}元，手续费${fee.toFixed(2)}元，实际到账${actualAmount.toFixed(2)}元。请等待审核，1-3个工作日内处理。`, 
+      type: 'system', 
+      is_read: false,
+      created_at: new Date().toISOString()
+    });
+
+    res.json({ withdrawal });
+  } catch (err) {
+    console.error('Create withdrawal error:', err);
+    res.status(500).json({ error: '提交失败' });
+  }
+});
+
+// 用户：提现记录
+app.get('/api/withdrawals', authMiddleware, async (req, res) => {
+  try {
+    const result = store.findMany('withdrawals', { user_id: req.user.id }, { sort: { created_at: 'desc' }, limit: 50 });
+    res.json({ withdrawals: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: '获取失败' });
+  }
+});
+
+// 管理员：提现审核列表
+app.get('/api/admin/withdrawals', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { status, keyword } = req.query;
+    let conditions = {};
+    if (status && status !== 'all') conditions.status = status;
+    const result = store.findMany('withdrawals', conditions, { sort: { created_at: 'desc' }, limit: 200 });
+    const rows = result.rows.map(r => {
+      const user = store.findOne('users', { id: r.user_id });
+      return { ...r, username: user?.username || '', phone: user?.phone || '' };
+    });
+    if (keyword) {
+      const kw = keyword.toLowerCase();
+      const filtered = rows.filter(r => 
+        r.username?.toLowerCase().includes(kw) || 
+        r.phone?.includes(kw) ||
+        r.withdraw_no?.toLowerCase().includes(kw) ||
+        r.wechat_account?.toLowerCase().includes(kw)
+      );
+      res.json({ withdrawals: filtered });
+    } else {
+      res.json({ withdrawals: rows });
+    }
+  } catch (err) {
+    console.error('Get withdrawals error:', err);
+    res.status(500).json({ error: '获取提现列表失败' });
+  }
+});
+
+// 管理员：通过提现
+app.post('/api/admin/withdrawals/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const withdrawal = store.findOne('withdrawals', { id: parseInt(req.params.id) });
+    if (!withdrawal) return res.status(404).json({ error: '提现申请不存在' });
+    if (withdrawal.status !== 'pending') return res.status(400).json({ error: '当前状态不可操作' });
+
+    store.update('withdrawals', { id: withdrawal.id }, { 
+      status: 'approved', 
+      approved_by: req.user.id,
+      approved_at: new Date().toISOString()
+    });
+
+    store.insert('messages', { 
+      user_id: withdrawal.user_id, 
+      title: '提现审核通过', 
+      content: `您的提现申请${withdrawal.withdraw_no}已审核通过，金额${withdrawal.amount}元，手续费${withdrawal.fee.toFixed(2)}元，实际到账${withdrawal.actual_amount.toFixed(2)}元。微信1-24小时内到账。`, 
+      type: 'system', 
+      is_read: false,
+      created_at: new Date().toISOString()
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Approve withdrawal error:', err);
+    res.status(500).json({ error: '操作失败' });
+  }
+});
+
+// 管理员：拒绝提现
+app.post('/api/admin/withdrawals/:id/reject', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const withdrawal = store.findOne('withdrawals', { id: parseInt(req.params.id) });
+    if (!withdrawal) return res.status(404).json({ error: '提现申请不存在' });
+    if (withdrawal.status !== 'pending') return res.status(400).json({ error: '当前状态不可操作' });
+
+    store.update('withdrawals', { id: withdrawal.id }, { 
+      status: 'rejected', 
+      reject_reason: reason || '',
+      rejected_by: req.user.id,
+      rejected_at: new Date().toISOString()
+    });
+
+    // 退回本金
+    store.update('users', { id: withdrawal.user_id }, { 
+      balance: { $inc: parseFloat(withdrawal.amount) },
+      principal_balance: { $inc: parseFloat(withdrawal.amount) }
+    });
+
+    store.insert('messages', { 
+      user_id: withdrawal.user_id, 
+      title: '提现被驳回', 
+      content: `您的提现申请${withdrawal.withdraw_no}被拒绝。${reason ? '原因：' + reason : ''}金额已退回您的账户。`, 
+      type: 'system', 
+      is_read: false,
+      created_at: new Date().toISOString()
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Reject withdrawal error:', err);
+    res.status(500).json({ error: '操作失败' });
+  }
+});
+
 // ===================== 卡密兑换 =====================
 
 app.post('/api/redeem', authMiddleware, async (req, res) => {
@@ -455,7 +640,10 @@ app.post('/api/redeem', authMiddleware, async (req, res) => {
     if (card.status === 'used') return res.status(400).json({ error: '卡密已被使用' });
 
     store.update('card_keys', { id: card.id }, { status: 'used', used_by: req.user.id, used_at: new Date().toISOString() });
-    store.update('users', { id: req.user.id }, { balance: { $inc: parseFloat(card.card_value) } });
+    store.update('users', { id: req.user.id }, { 
+      balance: { $inc: parseFloat(card.card_value) },
+      principal_balance: { $inc: parseFloat(card.card_value) }
+    });
     store.insert('messages', { user_id: req.user.id, title: '卡密兑换成功', content: `卡密兑换成功，到账${card.card_value}元`, type: 'system', is_read: false });
 
     res.json({ success: true, message: `兑换成功！到账${card.card_value}元` });
@@ -567,7 +755,10 @@ app.post('/api/red-packets/claim', authMiddleware, async (req, res) => {
 
     store.update('red_packets', { id: packet.id }, { remaining: { $inc: -1 } });
     store.insert('user_red_packets', { user_id: req.user.id, packet_id: parseInt(packetId), status: 'unused' });
-    store.update('users', { id: req.user.id }, { balance: { $inc: parseFloat(packet.amount) } });
+    store.update('users', { id: req.user.id }, { 
+      balance: { $inc: parseFloat(packet.amount) },
+      bonus_balance: { $inc: parseFloat(packet.amount) }
+    });
 
     res.json({ success: true, message: `领取成功！${packet.amount}元已到账` });
   } catch (err) {
@@ -623,7 +814,7 @@ app.post('/api/admin/users/:id/status', authMiddleware, adminMiddleware, async (
 
 app.post('/api/admin/users/:id/balance', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { amount, action, remark } = req.body;
+    const { amount, action, remark, balanceType } = req.body;
     const userId = parseInt(req.params.id);
     const amt = parseFloat(amount);
     if (isNaN(amt) || amt < 0) return res.status(400).json({ error: '金额无效' });
@@ -631,15 +822,45 @@ app.post('/api/admin/users/:id/balance', authMiddleware, adminMiddleware, async 
     const user = store.findOne('users', { id: userId });
     if (!user) return res.status(404).json({ error: '用户不存在' });
     
-    let newBalance = parseFloat(user.balance) || 0;
-    if (action === 'add') newBalance += amt;
-    else if (action === 'sub') newBalance -= amt;
-    else if (action === 'set') newBalance = amt;
-    else return res.status(400).json({ error: '操作类型无效' });
+    const oldPrincipal = parseFloat(user.principal_balance) || 0;
+    const oldBonus = parseFloat(user.bonus_balance) || 0;
+    let newPrincipal = oldPrincipal;
+    let newBonus = oldBonus;
+    const type = balanceType || 'principal';
     
-    if (newBalance < 0) return res.status(400).json({ error: '余额不能为负数' });
+    if (action === 'add') {
+      if (type === 'bonus') {
+        newBonus += amt;
+      } else {
+        newPrincipal += amt;
+      }
+    } else if (action === 'sub') {
+      // 先扣本金，再扣赠送金
+      let remain = amt;
+      if (newPrincipal >= remain) {
+        newPrincipal -= remain;
+        remain = 0;
+      } else {
+        remain -= newPrincipal;
+        newPrincipal = 0;
+        newBonus -= remain;
+      }
+    } else if (action === 'set') {
+      // 设置总余额，全部计入本金
+      newPrincipal = amt;
+      newBonus = 0;
+    } else {
+      return res.status(400).json({ error: '操作类型无效' });
+    }
     
-    store.update('users', { id: userId }, { balance: newBalance });
+    if (newPrincipal < 0 || newBonus < 0) return res.status(400).json({ error: '余额不能为负数' });
+    const newBalance = newPrincipal + newBonus;
+    
+    store.update('users', { id: userId }, { 
+      balance: newBalance,
+      principal_balance: newPrincipal,
+      bonus_balance: newBonus
+    });
     
     // 记录余额变动日志
     store.insert('balance_logs', {
@@ -647,8 +868,13 @@ app.post('/api/admin/users/:id/balance', authMiddleware, adminMiddleware, async 
       admin_id: req.user.id,
       action: action, // add/sub/set
       amount: amt,
+      balance_type: type,
       balance_before: parseFloat(user.balance) || 0,
       balance_after: newBalance,
+      principal_before: oldPrincipal,
+      principal_after: newPrincipal,
+      bonus_before: oldBonus,
+      bonus_after: newBonus,
       remark: remark || '',
       created_at: new Date().toISOString()
     });

@@ -20,10 +20,22 @@ function load() {
   } catch {
     data = {};
   }
-  const tables = ['users','products','categories','orders','recharges','banners','announcements','card_keys','group_buys','red_packets','user_red_packets','messages','qq_groups','recharge_packages','pay_settings','site_settings','balance_logs'];
+  const tables = ['users','products','categories','orders','recharges','banners','announcements','card_keys','group_buys','red_packets','user_red_packets','messages','qq_groups','recharge_packages','pay_settings','site_settings','balance_logs','withdrawals'];
   for (const t of tables) {
     if (!data[t]) data[t] = [];
     if (!nextIds[t]) nextIds[t] = (data[t].length > 0 ? Math.max(...data[t].map(r => r.id || 0)) : 0) + 1;
+  }
+  // 数据迁移：确保用户有本金和赠送金字段
+  if (data.users) {
+    let migrated = false;
+    for (const u of data.users) {
+      if (u.principal_balance === undefined) {
+        u.principal_balance = parseFloat(u.balance) || 0;
+        u.bonus_balance = 0;
+        migrated = true;
+      }
+    }
+    if (migrated) save();
   }
   return data;
 }

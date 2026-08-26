@@ -81,6 +81,7 @@ function navigate(page) {
 
     if (page === 'orders') loadOrders();
     else if (page === 'recharge') loadRecharge();
+    else if (page === 'withdraw') loadWithdraw();
     else if (page === 'messages') loadMessages();
     else if (page === 'progress') loadProgress();
     else if (page === 'group-buy') loadGroupBuys();
@@ -637,6 +638,130 @@ async function checkRechargeResult() {
     navigate('recharge');
 }
 
+// ===== 提现 =====
+let withdrawQrImage = '';
+
+async function loadWithdraw() {
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    const principal = parseFloat(currentUser.principal_balance) || 0;
+    const bonus = parseFloat(currentUser.bonus_balance) || 0;
+    $('withdrawPrincipal').innerHTML = principal.toFixed(2) + ' <span>元</span>';
+    $('withdrawBonus').textContent = bonus.toFixed(2);
+    $('withdrawAmount').value = '';
+    $('withdrawActual').textContent = '0.00';
+    $('withdrawWechat').value = '';
+    $('withdrawName').value = '';
+    $('withdrawRemark').value = '';
+    withdrawQrImage = '';
+    $('withdrawQrPreview').innerHTML = `
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.4">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <path d="M21 15l-5-5L5 21"/>
+        </svg>
+        <p style="font-size:13px;color:#999;margin-top:8px">点击上传微信收款码</p>
+    `;
+    loadWithdrawRecords();
+}
+
+function updateWithdrawActual() {
+    const amt = parseFloat($('withdrawAmount').value) || 0;
+    const fee = amt * 0.3;
+    const actual = amt - fee;
+    $('withdrawActual').textContent = actual.toFixed(2);
+}
+
+function setWithdrawAll() {
+    const principal = parseFloat(currentUser.principal_balance) || 0;
+    $('withdrawAmount').value = principal.toFixed(2);
+    updateWithdrawActual();
+}
+
+function handleWithdrawQrUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        withdrawQrImage = e.target.result;
+        $('withdrawQrPreview').innerHTML = `<img src="${withdrawQrImage}" style="max-width:200px;max-height:200px;border-radius:8px">`;
+    };
+    reader.readAsDataURL(file);
+}
+
+async function submitWithdraw() {
+    if (!currentUser) { showToast('请先登录', 'error'); return; }
+    const amount = parseFloat($('withdrawAmount').value);
+    const wechat_account = $('withdrawWechat').value.trim();
+    const wechat_name = $('withdrawName').value.trim();
+    const remark = $('withdrawRemark').value.trim();
+    
+    if (!amount || isNaN(amount)) { showToast('请输入提现金额', 'error'); return; }
+    if (amount < 200) { showToast('最低提现金额为200元', 'error'); return; }
+    if (!wechat_account) { showToast('请输入微信号', 'error'); return; }
+    if (!wechat_name) { showToast('请输入收款人姓名', 'error'); return; }
+    
+    const principal = parseFloat(currentUser.principal_balance) || 0;
+    if (principal < amount) { showToast('可提现余额不足（赠送金不可提现）', 'error'); return; }
+    
+    if (!confirm(`确认提现 ${amount} 元？\n手续费 30%（${(amount * 0.3).toFixed(2)}元）\n实际到账 ${(amount * 0.7).toFixed(2)} 元`)) return;
+    
+    try {
+        await api('/withdrawals', 'POST', { 
+            amount, wechat_account, wechat_name, 
+            qrcode_image: withdrawQrImage, remark 
+        });
+        showToast('申请提交成功，等待审核', 'success');
+        await refreshUser();
+        loadWithdraw();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function loadWithdrawRecords() {
+    try {
+        const data = await api('/withdrawals', false);
+        const statusMap = {
+            'pending': { text: '待审核', color: '#f59e0b' },
+            'approved': { text: '已通过', color: '#10b981' },
+            'rejected': { text: '已拒绝', color: '#ef4444' }
+        };
+        const container = $('withdrawRecords');
+        if (data.withdrawals.length === 0) {
+            container.innerHTML = '<div style="text-align:center;padding:30px;color:#999;font-size:13px">暂无提现记录</div>';
+            return;
+        }
+        container.innerHTML = data.withdrawals.map(w => {
+            const st = statusMap[w.status] || { text: w.status, color: '#999' };
+            return `<div class="withdraw-record-item">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="font-weight:600;font-size:14px">${w.withdraw_no}</span>
+                    <span style="color:${st.color};font-weight:500;font-size:13px">${st.text}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;color:#666;margin-bottom:4px">
+                    <span>提现金额</span>
+                    <span style="color:#f5576c;font-weight:600">¥${parseFloat(w.amount).toFixed(2)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#999;margin-bottom:4px">
+                    <span>手续费</span>
+                    <span>¥${parseFloat(w.fee).toFixed(2)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#999;margin-bottom:4px">
+                    <span>实际到账</span>
+                    <span style="color:#10b981">¥${parseFloat(w.actual_amount).toFixed(2)}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#999">
+                    <span>提交时间</span>
+                    <span>${fmtDate(w.created_at)}</span>
+                </div>
+                ${w.reject_reason ? `<div style="margin-top:8px;padding:8px;background:#fef2f2;border-radius:6px;font-size:12px;color:#ef4444">拒绝原因：${w.reject_reason}</div>` : ''}
+            </div>`;
+        }).join('');
+    } catch (err) {
+        $('withdrawRecords').innerHTML = '<div style="text-align:center;padding:30px;color:#ef4444">加载失败</div>';
+    }
+}
+
 // ===== 卡密兑换 =====
 async function redeemCard() {
     const cardNo = $('cardNoInput').value.trim();
@@ -916,6 +1041,7 @@ function adminTab(tab, el) {
     else if (tab === 'products') loadAdminProducts();
     else if (tab === 'orders') loadAdminOrders();
     else if (tab === 'recharges') loadAdminRecharges();
+    else if (tab === 'withdrawals') loadAdminWithdrawals();
     else if (tab === 'messages') loadAdminMessages();
     else if (tab === 'announcements') loadAdminAnnouncements();
     else if (tab === 'banners') loadAdminBanners();
@@ -1165,18 +1291,25 @@ async function adminAddBalance(id) {
         const user = data.users.find(u => u.id === id);
         if (!user) { showToast('用户不存在', 'error'); return; }
         
+        const principal = parseFloat(user.principal_balance) || 0;
+        const bonus = parseFloat(user.bonus_balance) || 0;
+        
         const container = $('userFormContainer');
         container.innerHTML = `
             <div class="admin-modal" onclick="closeUserBalanceModal(event)">
-                <div class="admin-modal-content" style="max-width:420px" onclick="event.stopPropagation()">
+                <div class="admin-modal-content" style="max-width:460px" onclick="event.stopPropagation()">
                     <div class="admin-modal-header">
                         <h3>调整余额 - ${user.username}</h3>
                         <button class="modal-close" onclick="closeUserBalanceModal()">×</button>
                     </div>
                     <div class="admin-modal-body">
                         <div style="background:#f5f7fa;padding:16px;border-radius:8px;margin-bottom:16px;text-align:center">
-                            <div style="font-size:13px;color:#999;margin-bottom:4px">当前余额</div>
+                            <div style="font-size:13px;color:#999;margin-bottom:4px">当前总余额</div>
                             <div style="font-size:28px;font-weight:700;color:#f5576c">¥${parseFloat(user.balance).toFixed(2)}</div>
+                            <div style="display:flex;justify-content:center;gap:20px;margin-top:10px;font-size:12px">
+                                <span style="color:#667eea">本金：¥${principal.toFixed(2)}</span>
+                                <span style="color:#f59e0b">赠送金：¥${bonus.toFixed(2)}</span>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>调整方式</label>
@@ -1192,6 +1325,19 @@ async function adminAddBalance(id) {
                                 <label style="flex:1;padding:10px;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;text-align:center" id="balActionSet" onclick="selectBalanceAction('set')">
                                     <input type="radio" name="balAction" value="set" style="display:none">
                                     <span style="color:#667eea;font-weight:600">= 设置为</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group" id="balanceTypeGroup">
+                            <label>增加到</label>
+                            <div style="display:flex;gap:10px">
+                                <label style="flex:1;padding:10px;border:2px solid #667eea;border-radius:8px;cursor:pointer;text-align:center;background:#f5f3ff" id="balTypePrincipal" onclick="selectBalanceType('principal')">
+                                    <input type="radio" name="balType" value="principal" checked style="display:none">
+                                    <span style="color:#667eea;font-weight:600">本金账户</span>
+                                </label>
+                                <label style="flex:1;padding:10px;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;text-align:center" id="balTypeBonus" onclick="selectBalanceType('bonus')">
+                                    <input type="radio" name="balType" value="bonus" style="display:none">
+                                    <span style="color:#f59e0b;font-weight:600">赠送金</span>
                                 </label>
                             </div>
                         </div>
@@ -1212,12 +1358,15 @@ async function adminAddBalance(id) {
             </div>
         `;
         selectBalanceAction('add');
+        currentBalanceType = 'principal';
     } catch (err) {
         showToast(err.message, 'error');
     }
 }
 
 let currentBalanceAction = 'add';
+let currentBalanceType = 'principal';
+
 function selectBalanceAction(action) {
     currentBalanceAction = action;
     ['Add', 'Sub', 'Set'].forEach(a => {
@@ -1225,6 +1374,23 @@ function selectBalanceAction(action) {
         if (el) {
             el.style.borderColor = a.toLowerCase() === action ? '#667eea' : '#e0e0e0';
             el.style.background = a.toLowerCase() === action ? '#f5f3ff' : '#fff';
+        }
+    });
+    // 只有增加时显示类型选择
+    const typeGroup = $('balanceTypeGroup');
+    if (typeGroup) {
+        typeGroup.style.display = action === 'add' ? 'block' : 'none';
+    }
+}
+
+function selectBalanceType(type) {
+    currentBalanceType = type;
+    ['principal', 'bonus'].forEach(t => {
+        const el = $('balType' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (el) {
+            el.style.borderColor = t === type ? (t === 'principal' ? '#667eea' : '#f59e0b') : '#e0e0e0';
+            el.style.borderWidth = t === type ? '2px' : '1px';
+            el.style.background = t === type ? (t === 'principal' ? '#f5f3ff' : '#fffbeb') : '#fff';
         }
     });
 }
@@ -1245,6 +1411,7 @@ async function submitBalanceChange(userId) {
         await api(`/admin/users/${userId}/balance`, 'POST', { 
             amount: amount, 
             action: currentBalanceAction,
+            balanceType: currentBalanceType,
             remark: remark
         });
         showToast('余额调整成功', 'success');
@@ -1505,6 +1672,161 @@ async function rejectRecharge(id) {
         await api(`/admin/recharges/${id}/reject`, 'POST', { reason });
         showToast('已拒绝', 'success');
         loadAdminRecharges();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// ===== 提现审核 =====
+let withdrawFilter = 'all';
+async function loadAdminWithdrawals() {
+    const content = $('adminContent');
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/withdrawals?status=' + withdrawFilter, false);
+        const statusMap = {
+            'pending': { text: '待审核', color: '#f59e0b' },
+            'approved': { text: '已通过', color: '#10b981' },
+            'rejected': { text: '已拒绝', color: '#ef4444' }
+        };
+        content.innerHTML = `
+            <h3 style="margin-bottom:16px;font-size:18px">提现审核</h3>
+            <div class="admin-toolbar">
+                <div style="display:flex;gap:8px">
+                    <button class="btn-admin ${withdrawFilter==='all'?'primary':''}" onclick="filterWithdrawals('all')">全部</button>
+                    <button class="btn-admin ${withdrawFilter==='pending'?'primary':''}" onclick="filterWithdrawals('pending')">待审核</button>
+                    <button class="btn-admin ${withdrawFilter==='approved'?'primary':''}" onclick="filterWithdrawals('approved')">已通过</button>
+                    <button class="btn-admin ${withdrawFilter==='rejected'?'primary':''}" onclick="filterWithdrawals('rejected')">已拒绝</button>
+                </div>
+            </div>
+            <div class="admin-table">
+                <table>
+                    <thead><tr><th>单号</th><th>用户</th><th>金额</th><th>手续费</th><th>实际到账</th><th>微信号</th><th>姓名</th><th>状态</th><th>提交时间</th><th>操作</th></tr></thead>
+                    <tbody>
+                        ${data.withdrawals.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:40px;color:#999">暂无数据</td></tr>' : 
+                        data.withdrawals.map(w => {
+                            const st = statusMap[w.status] || { text: w.status, color: '#999' };
+                            return `<tr>
+                                <td>${w.withdraw_no}</td>
+                                <td>${w.username || '-'}</td>
+                                <td style="font-weight:600;color:#f5576c">¥${parseFloat(w.amount).toFixed(2)}</td>
+                                <td>¥${parseFloat(w.fee).toFixed(2)}</td>
+                                <td style="color:#10b981">¥${parseFloat(w.actual_amount).toFixed(2)}</td>
+                                <td>${w.wechat_account || '-'}</td>
+                                <td>${w.wechat_name || '-'}</td>
+                                <td><span style="color:${st.color};font-weight:500">${st.text}</span></td>
+                                <td>${fmtDate(w.created_at)}</td>
+                                <td>
+                                    ${w.status === 'pending' ? `
+                                        <button class="btn-admin success" style="padding:4px 10px;font-size:12px" onclick="viewWithdraw(${w.id})">查看</button>
+                                        <button class="btn-admin success" style="padding:4px 10px;font-size:12px" onclick="approveWithdraw(${w.id})">通过</button>
+                                        <button class="btn-admin danger" style="padding:4px 10px;font-size:12px" onclick="rejectWithdraw(${w.id})">拒绝</button>
+                                    ` : w.status === 'approved' ? 
+                                        `<button class="btn-admin" style="padding:4px 10px;font-size:12px" onclick="viewWithdraw(${w.id})">查看</button>` :
+                                    w.status === 'rejected' ?
+                                        `<button class="btn-admin" style="padding:4px 10px;font-size:12px" onclick="viewWithdraw(${w.id})">查看</button>` :
+                                        ''
+                                    }
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div id="withdrawDetailContainer"></div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+function filterWithdrawals(status) {
+    withdrawFilter = status;
+    loadAdminWithdrawals();
+}
+
+async function viewWithdraw(id) {
+    try {
+        const data = await api('/admin/withdrawals?status=all', false);
+        const w = data.withdrawals.find(x => x.id === id);
+        if (!w) return;
+        const statusMap = {
+            'pending': { text: '待审核', color: '#f59e0b' },
+            'approved': { text: '已通过', color: '#10b981' },
+            'rejected': { text: '已拒绝', color: '#ef4444' }
+        };
+        const st = statusMap[w.status] || { text: w.status, color: '#999' };
+        const container = $('withdrawDetailContainer');
+        container.innerHTML = `
+            <div class="admin-modal" onclick="closeWithdrawDetail(event)">
+                <div class="admin-modal-content" style="max-width:480px" onclick="event.stopPropagation()">
+                    <div class="admin-modal-header">
+                        <h3>提现详情 - ${w.withdraw_no}</h3>
+                        <button class="modal-close" onclick="closeWithdrawDetail()">×</button>
+                    </div>
+                    <div class="admin-modal-body">
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
+                            <span style="color:#666">用户</span><span>${w.username || '-'}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
+                            <span style="color:#666">提现金额</span><span style="color:#f5576c;font-weight:600">¥${parseFloat(w.amount).toFixed(2)}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
+                            <span style="color:#666">手续费 (30%)</span><span>¥${parseFloat(w.fee).toFixed(2)}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
+                            <span style="color:#666">实际到账</span><span style="color:#10b981;font-weight:600">¥${parseFloat(w.actual_amount).toFixed(2)}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
+                            <span style="color:#666">微信号</span><span>${w.wechat_account || '-'}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
+                            <span style="color:#666">收款人姓名</span><span>${w.wechat_name || '-'}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">
+                            <span style="color:#666">状态</span><span style="color:${st.color};font-weight:500">${st.text}</span>
+                        </div>
+                        <div style="padding:8px 0">
+                            <div style="color:#666;margin-bottom:8px">微信收款码</div>
+                            ${w.qrcode_image ? `<img src="${w.qrcode_image}" style="max-width:200px;max-height:200px;border-radius:8px;border:1px solid #eee">` : '<div style="color:#999;font-size:13px">未上传</div>'}
+                        </div>
+                        ${w.remark ? `<div style="padding:8px 0"><div style="color:#666;margin-bottom:4px">备注</div><div style="font-size:13px">${w.remark}</div></div>` : ''}
+                        ${w.reject_reason ? `<div style="padding:8px 0"><div style="color:#ef4444;margin-bottom:4px">拒绝原因</div><div style="font-size:13px;color:#ef4444">${w.reject_reason}</div></div>` : ''}
+                    </div>
+                    <div class="admin-modal-footer">
+                        <button class="btn-admin" onclick="closeWithdrawDetail()">关闭</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+function closeWithdrawDetail(event) {
+    if (event && event.target !== event.currentTarget) return;
+    $('withdrawDetailContainer').innerHTML = '';
+}
+
+async function approveWithdraw(id) {
+    if (!confirm('确认通过此提现申请？通过后请及时转账给用户。')) return;
+    try {
+        await api(`/admin/withdrawals/${id}/approve`, 'POST', {});
+        showToast('审核通过', 'success');
+        loadAdminWithdrawals();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function rejectWithdraw(id) {
+    const reason = prompt('请输入拒绝原因（选填）：');
+    if (reason === null) return;
+    try {
+        await api(`/admin/withdrawals/${id}/reject`, 'POST', { reason });
+        showToast('已拒绝，金额已退回', 'success');
+        loadAdminWithdrawals();
     } catch (err) {
         showToast(err.message, 'error');
     }

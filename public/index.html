@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>一屿刷课平台</title>
-    <link rel="stylesheet" href="/css/style.css?v=20260826">
+    <link rel="stylesheet" href="/css/style.css?v=20260826v2">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 </head>
@@ -66,6 +66,7 @@
                                 </div>
                                 <a onclick="navigate('orders')">我的订单</a>
                                 <a onclick="navigate('recharge')">余额充值</a>
+                                <a onclick="navigate('withdraw')">余额提现</a>
                                 <a onclick="navigate('messages')">消息中心</a>
                                 <a onclick="navigate('progress')">进度查询</a>
                                 <a onclick="navigate('redeem')">卡密兑换</a>
@@ -297,6 +298,72 @@
                 </div>
             </div>
 
+            <!-- 提现页 -->
+            <div class="page" id="page-withdraw" style="display:none;">
+                <div class="page-container">
+                    <h2 class="page-title">余额提现</h2>
+                    <div class="balance-card">
+                        <div class="balance-label">可提现余额（本金）</div>
+                        <div class="balance-amount" id="withdrawPrincipal">0.00 <span>元</span></div>
+                        <div style="font-size:13px;opacity:.7;margin-top:4px">赠送金：<span id="withdrawBonus">0.00</span> 元（不可提现）</div>
+                    </div>
+                    <div class="withdraw-form">
+                        <div class="form-group">
+                            <label>提现金额 *</label>
+                            <div style="display:flex;gap:10px;align-items:center">
+                                <input type="number" id="withdrawAmount" placeholder="最低提现200元" min="200" step="0.01" style="flex:1" oninput="updateWithdrawActual()">
+                                <button class="btn-secondary" style="white-space:nowrap" onclick="setWithdrawAll()">全部提现</button>
+                            </div>
+                            <div style="font-size:12px;color:#999;margin-top:6px">
+                                手续费 30%，实际到账：<span id="withdrawActual" style="color:#10b981;font-weight:600">0.00</span> 元
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>微信号 *</label>
+                            <input type="text" id="withdrawWechat" placeholder="请输入收款微信号">
+                        </div>
+                        <div class="form-group">
+                            <label>收款人姓名 *</label>
+                            <input type="text" id="withdrawName" placeholder="请输入收款人真实姓名">
+                        </div>
+                        <div class="form-group">
+                            <label>微信收款码</label>
+                            <div class="upload-area" onclick="document.getElementById('withdrawQrInput').click()">
+                                <input type="file" id="withdrawQrInput" accept="image/*" style="display:none" onchange="handleWithdrawQrUpload(event)">
+                                <div id="withdrawQrPreview">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.4">
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <path d="M21 15l-5-5L5 21"/>
+                                    </svg>
+                                    <p style="font-size:13px;color:#999;margin-top:8px">点击上传微信收款码</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>备注</label>
+                            <textarea id="withdrawRemark" placeholder="如有特殊需求请说明"></textarea>
+                        </div>
+                        <button class="btn-primary btn-full" onclick="submitWithdraw()">提交申请</button>
+                    </div>
+                    <div class="withdraw-tips">
+                        <h3>提现说明</h3>
+                        <ul>
+                            <li>提现申请提交后，我们会在1-3个工作日内审核处理</li>
+                            <li>最低提现金额为 ¥200，手续费为提现金额的 30%</li>
+                            <li>请确保收款信息准确无误，因信息错误导致的损失由用户承担</li>
+                            <li>审核通过后，提现到账时间：微信1-24小时</li>
+                            <li>如申请被拒绝，可在提现记录中查看拒绝原因</li>
+                            <li>如有疑问，请联系客服处理</li>
+                        </ul>
+                    </div>
+                    <div class="withdraw-records">
+                        <h3 style="font-size:16px;margin:20px 0 12px">提现记录</h3>
+                        <div id="withdrawRecords"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 消息页 -->
             <div class="page" id="page-messages" style="display:none;">
                 <div class="page-container">
@@ -316,6 +383,7 @@
                             <a onclick="adminTab('products', this)">商品管理</a>
                             <a onclick="adminTab('orders', this)">订单管理</a>
                             <a onclick="adminTab('recharges', this)">充值审核</a>
+                            <a onclick="adminTab('withdrawals', this)">提现审核</a>
                             <a onclick="adminTab('messages', this)">消息群发</a>
                             <a onclick="adminTab('announcements', this)">公告管理</a>
                             <a onclick="adminTab('banners', this)">Banner管理</a>
@@ -440,6 +508,10 @@
                 <label>备注</label>
                 <textarea id="orderRemark" placeholder="特殊要求请备注"></textarea>
             </div>
+            <div class="order-notice" style="background:#fff7e6;border:1px solid #ffe58f;border-radius:8px;padding:12px;font-size:13px;color:#d46b08;line-height:1.6">
+                <div style="font-weight:600;margin-bottom:4px">⚠️ 下单须知</div>
+                <div>有几门课程就下几单，若多课程仍只有一单，按只刷第一门课程为准</div>
+            </div>
             <div class="form-group">
                 <label>数量</label>
                 <div class="quantity-control">
@@ -480,6 +552,6 @@
         </svg>
     </div>
 
-    <script src="/js/app.js?v=20260826"></script>
+    <script src="/js/app.js?v=20260826v2"></script>
 </body>
 </html>

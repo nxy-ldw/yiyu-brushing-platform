@@ -215,6 +215,17 @@ img{max-width:100%;display:block}
 .recharge-tips li{padding:6px 0;font-size:14px;color:var(--text-light);padding-left:20px;position:relative}
 .recharge-tips li::before{content:'';position:absolute;left:0;top:14px;width:6px;height:6px;border-radius:50%;background:var(--primary)}
 
+/* ===== 提现 ===== */
+.withdraw-form{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:20px}
+.withdraw-tips{background:#fff;border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+.withdraw-tips h3{font-size:16px;margin-bottom:12px;color:var(--dark)}
+.withdraw-tips ul{list-style:none;padding:0}
+.withdraw-tips li{padding:6px 0;font-size:14px;color:var(--text-light);padding-left:20px;position:relative}
+.withdraw-tips li::before{content:'';position:absolute;left:0;top:14px;width:6px;height:6px;border-radius:50%;background:var(--primary)}
+.withdraw-record-item{background:#fff;border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);margin-bottom:10px}
+.upload-area{border:2px dashed #ddd;border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:all .3s}
+.upload-area:hover{border-color:var(--primary);background:#f9f9ff}
+
 /* ===== 消息 ===== */
 .messages-list{display:flex;flex-direction:column;gap:12px}
 .message-item{background:#fff;border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);display:flex;gap:16px}
