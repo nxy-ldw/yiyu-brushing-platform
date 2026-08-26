@@ -255,13 +255,13 @@ async function loadSiteInfo() {
             const el = $('footerSiteDesc');
             if (el) el.textContent = s.site_desc;
         }
-        // 关于我们（电话/QQ与客服信息同步）
+        // 关于我们
         const aboutEl = $('footerAboutUs');
         if (aboutEl) {
             const lines = [];
             if (s.about_company) lines.push(s.about_company);
-            if (s.service_phone) lines.push('电话：' + s.service_phone);
-            if (s.service_qq) lines.push('QQ：' + s.service_qq);
+            if (s.about_phone) lines.push('电话：' + s.about_phone);
+            if (s.about_qq) lines.push('QQ：' + s.about_qq);
             if (lines.length) {
                 aboutEl.innerHTML = lines.map(l => `<p>${l}</p>`).join('');
             }
@@ -2429,8 +2429,15 @@ async function loadAdminSiteSettings() {
                     <label>关于我们-公司名称</label>
                     <input type="text" id="aboutCompany" value="${s.about_company || ''}" placeholder="一屿文化出品">
                 </div>
-                <div style="background:#e0f2fe;border:1px solid #7dd3fc;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#0369a1">
-                    💡 关于我们的<strong>电话</strong>和<strong>QQ</strong>自动同步上方的客服电话和客服QQ
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                    <div class="admin-form-group">
+                        <label>关于我们-联系电话</label>
+                        <input type="text" id="aboutPhone" value="${s.about_phone || ''}" placeholder="17712328993">
+                    </div>
+                    <div class="admin-form-group">
+                        <label>关于我们-联系QQ</label>
+                        <input type="text" id="aboutQQ" value="${s.about_qq || ''}" placeholder="2947543703">
+                    </div>
                 </div>
                 <div class="admin-form-group">
                     <label>支付说明（每行一条）</label>
@@ -2470,6 +2477,8 @@ async function saveSiteSettings() {
             service_qq: val('siteQQ'),
             footer_text: val('siteFooter'),
             about_company: val('aboutCompany'),
+            about_phone: val('aboutPhone'),
+            about_qq: val('aboutQQ'),
             payment_note: val('paymentNote'),
             maintenance_mode: maintenanceModeEl?.checked ? 1 : 0,
             maintenance_title: val('maintenanceTitle'),
