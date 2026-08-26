@@ -527,11 +527,39 @@ app.post('/api/admin/users/:id/status', authMiddleware, adminMiddleware, async (
 
 app.post('/api/admin/users/:id/balance', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { amount, action } = req.body;
-    if (action === 'add') store.update('users', { id: parseInt(req.params.id) }, { balance: { $inc: parseFloat(amount) } });
-    else store.update('users', { id: parseInt(req.params.id) }, { balance: { $inc: -parseFloat(amount) } });
-    res.json({ success: true });
+    const { amount, action, remark } = req.body;
+    const userId = parseInt(req.params.id);
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt < 0) return res.status(400).json({ error: '金额无效' });
+    
+    const user = store.findOne('users', { id: userId });
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+    
+    let newBalance = parseFloat(user.balance) || 0;
+    if (action === 'add') newBalance += amt;
+    else if (action === 'sub') newBalance -= amt;
+    else if (action === 'set') newBalance = amt;
+    else return res.status(400).json({ error: '操作类型无效' });
+    
+    if (newBalance < 0) return res.status(400).json({ error: '余额不能为负数' });
+    
+    store.update('users', { id: userId }, { balance: newBalance });
+    
+    // 记录余额变动日志
+    store.insert('balance_logs', {
+      user_id: userId,
+      admin_id: req.user.id,
+      action: action, // add/sub/set
+      amount: amt,
+      balance_before: parseFloat(user.balance) || 0,
+      balance_after: newBalance,
+      remark: remark || '',
+      created_at: new Date().toISOString()
+    });
+    
+    res.json({ success: true, new_balance: newBalance });
   } catch (err) {
+    console.error('Balance adjust error:', err);
     res.status(500).json({ error: '操作失败' });
   }
 });

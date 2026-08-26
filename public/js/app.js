@@ -1029,7 +1029,7 @@ async function loadAdminUsers() {
                             <td>${u.status === 1 ? '正常' : '封禁'}</td>
                             <td>
                                 <button class="btn-admin" style="padding:4px 12px;font-size:12px" onclick="editUser(${u.id})">编辑</button>
-                                <button class="btn-admin success" style="padding:4px 12px;font-size:12px" onclick="adminAddBalance(${u.id})">充值</button>
+                                <button class="btn-admin success" style="padding:4px 12px;font-size:12px" onclick="adminAddBalance(${u.id})">调余额</button>
                                 ${isAdmin ? '' : `<button class="btn-admin ${u.status === 1 ? 'danger' : 'success'}" style="padding:4px 12px;font-size:12px" onclick="adminToggleUser(${u.id}, ${u.status === 1 ? 0 : 1})">${u.status === 1 ? '封禁' : '解封'}</button>`}
                             </td>
                         </tr>`}).join('')}
@@ -1159,11 +1159,95 @@ async function adminToggleUser(id, status) {
 }
 
 async function adminAddBalance(id) {
-    const amount = prompt('输入充值金额：');
-    if (!amount) return;
     try {
-        await api(`/admin/users/${id}/balance`, 'POST', { amount: parseFloat(amount), action: 'add' });
-        showToast('充值成功', 'success');
+        const data = await api('/admin/users?pageSize=100');
+        const user = data.users.find(u => u.id === id);
+        if (!user) { showToast('用户不存在', 'error'); return; }
+        
+        const container = $('userFormContainer');
+        container.innerHTML = `
+            <div class="admin-modal" onclick="closeUserBalanceModal(event)">
+                <div class="admin-modal-content" style="max-width:420px" onclick="event.stopPropagation()">
+                    <div class="admin-modal-header">
+                        <h3>调整余额 - ${user.username}</h3>
+                        <button class="modal-close" onclick="closeUserBalanceModal()">×</button>
+                    </div>
+                    <div class="admin-modal-body">
+                        <div style="background:#f5f7fa;padding:16px;border-radius:8px;margin-bottom:16px;text-align:center">
+                            <div style="font-size:13px;color:#999;margin-bottom:4px">当前余额</div>
+                            <div style="font-size:28px;font-weight:700;color:#f5576c">¥${parseFloat(user.balance).toFixed(2)}</div>
+                        </div>
+                        <div class="form-group">
+                            <label>调整方式</label>
+                            <div style="display:flex;gap:10px">
+                                <label style="flex:1;padding:10px;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;text-align:center" id="balActionAdd" onclick="selectBalanceAction('add')">
+                                    <input type="radio" name="balAction" value="add" checked style="display:none">
+                                    <span style="color:#43e97b;font-weight:600">+ 增加余额</span>
+                                </label>
+                                <label style="flex:1;padding:10px;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;text-align:center" id="balActionSub" onclick="selectBalanceAction('sub')">
+                                    <input type="radio" name="balAction" value="sub" style="display:none">
+                                    <span style="color:#f5576c;font-weight:600">- 扣除余额</span>
+                                </label>
+                                <label style="flex:1;padding:10px;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;text-align:center" id="balActionSet" onclick="selectBalanceAction('set')">
+                                    <input type="radio" name="balAction" value="set" style="display:none">
+                                    <span style="color:#667eea;font-weight:600">= 设置为</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>金额（元）</label>
+                            <input type="number" id="balanceAmount" placeholder="请输入金额" step="0.01" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>操作备注（选填）</label>
+                            <input type="text" id="balanceRemark" placeholder="例如：活动赠送、扣款等">
+                        </div>
+                    </div>
+                    <div class="admin-modal-footer">
+                        <button class="btn-admin" onclick="closeUserBalanceModal()">取消</button>
+                        <button class="btn-admin primary" onclick="submitBalanceChange(${user.id})">确认调整</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        selectBalanceAction('add');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+let currentBalanceAction = 'add';
+function selectBalanceAction(action) {
+    currentBalanceAction = action;
+    ['Add', 'Sub', 'Set'].forEach(a => {
+        const el = $('balAction' + a);
+        if (el) {
+            el.style.borderColor = a.toLowerCase() === action ? '#667eea' : '#e0e0e0';
+            el.style.background = a.toLowerCase() === action ? '#f5f3ff' : '#fff';
+        }
+    });
+}
+
+function closeUserBalanceModal() {
+    const container = $('userFormContainer');
+    if (container) container.innerHTML = '';
+}
+
+async function submitBalanceChange(userId) {
+    const amount = parseFloat($('balanceAmount').value);
+    const remark = $('balanceRemark')?.value?.trim() || '';
+    if (isNaN(amount) || amount < 0) {
+        showToast('请输入有效金额', 'error');
+        return;
+    }
+    try {
+        await api(`/admin/users/${userId}/balance`, 'POST', { 
+            amount: amount, 
+            action: currentBalanceAction,
+            remark: remark
+        });
+        showToast('余额调整成功', 'success');
+        closeUserBalanceModal();
         loadAdminUsers();
     } catch (err) {
         showToast(err.message, 'error');
@@ -1918,10 +2002,14 @@ function showMaintenanceModal(title, content) {
             </div>
             <h2 style="margin:0 0 12px 0;font-size:20px;color:#333">${title}</h2>
             <p style="margin:0 0 24px 0;color:#666;line-height:1.6">${content}</p>
-            <button onclick="this.closest('#maintenanceModal').remove()" style="padding:10px 32px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">我知道了</button>
+            <button onclick="closeMaintenanceModal()" style="padding:10px 32px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px">我知道了</button>
         </div>
     `;
     document.body.appendChild(modal);
+}
+function closeMaintenanceModal() {
+    const modal = $('maintenanceModal');
+    if (modal) modal.remove();
 }
 
 init();
