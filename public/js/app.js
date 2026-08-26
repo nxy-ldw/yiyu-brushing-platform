@@ -1753,9 +1753,9 @@ function showBatchPriceForm() {
                 </div>
                 <div class="admin-form-group">
                     <label>调整值</label>
-                    <div style="display:flex;gap:8px">
-                        <input type="number" id="batchValue" step="0.01" placeholder="例如：10" style="flex:1">
-                        <select id="batchDirection" style="width:auto;min-width:120px">
+                    <div style="display:flex;gap:10px;align-items:flex-end">
+                        <input type="number" id="batchValue" step="0.01" placeholder="例如：10" style="flex:2">
+                        <select id="batchDirection" style="flex:1;min-width:0">
                             <option value="up">上调（+）</option>
                             <option value="down">下调（-）</option>
                         </select>
