@@ -1745,6 +1745,7 @@ function handleQQCallback() {
 // ===== 初始化 =====
 async function init() {
     handleQQCallback();
+    await loadBanners();
     initBanner();
     await checkLogin();
     await checkMaintenanceMode();
@@ -1753,6 +1754,45 @@ async function init() {
     loadProducts();
     loadQQGroups();
     navigate('home');
+}
+
+// 加载Banner
+async function loadBanners() {
+    try {
+        const data = await api('/banners');
+        const banners = data.banners || [];
+        if (banners.length === 0) return; // 使用静态默认Banner
+        
+        const gradients = [
+            'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+            'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+            'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+            'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+            'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+        ];
+        
+        const carousel = $('bannerCarousel');
+        carousel.innerHTML = banners.map((b, i) => {
+            const gradient = gradients[i % gradients.length];
+            const bgStyle = b.image 
+                ? `background-image: url('${b.image}'), ${gradient}; background-size: cover; background-position: center;`
+                : `background: ${gradient};`;
+            return `
+                <div class="banner-slide ${i === 0 ? 'active' : ''}" style="${bgStyle}" onclick="${b.link ? `window.open('${b.link}')` : ''}">
+                    <div class="banner-content">
+                        ${!b.image ? `<h2>一屿刷课平台</h2><p>专业 · 快速 · 安全 · 信赖</p>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // 重置banner状态
+        bannerIndex = 0;
+        $('bannerDots').innerHTML = '';
+    } catch (err) {
+        console.warn('Load banners failed, using defaults:', err.message);
+    }
 }
 
 async function checkMaintenanceMode() {
