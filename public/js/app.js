@@ -94,6 +94,7 @@ document.addEventListener('click', (e) => {
 function showLoginModal() { $('loginModal').style.display = 'flex'; }
 function showRegisterModal() { $('registerModal').style.display = 'flex'; }
 function closeModal(id) { $(id).style.display = 'none'; }
+function closeModalByContainer(containerId) { $(containerId).innerHTML = ''; }
 
 async function doLogin() {
     const username = $('loginUsername').value.trim();
@@ -935,22 +936,24 @@ async function loadAdminUsers() {
             </div>
             <div class="admin-table">
                 <table>
-                    <thead><tr><th>ID</th><th>用户名</th><th>手机</th><th>QQ</th><th>代理等级</th><th>余额</th><th>状态</th><th>操作</th></tr></thead>
+                    <thead><tr><th>ID</th><th>用户名</th><th>手机</th><th>QQ</th><th>角色/等级</th><th>余额</th><th>状态</th><th>操作</th></tr></thead>
                     <tbody>
-                        ${data.users.map(u => `<tr>
+                        ${data.users.map(u => {
+                            const isAdmin = u.role === 'admin';
+                            return `<tr>
                             <td>${u.id}</td>
                             <td>${u.username}</td>
                             <td>${u.phone || '-'}</td>
                             <td>${u.qq || '-'}</td>
-                            <td>${getAgentLevelText(u.agent_level)}</td>
+                            <td>${isAdmin ? '<span style="color:#f5576c;font-weight:600">管理员</span>' : getAgentLevelText(u.agent_level)}</td>
                             <td>¥${parseFloat(u.balance).toFixed(2)}</td>
                             <td>${u.status === 1 ? '正常' : '封禁'}</td>
                             <td>
                                 <button class="btn-admin" style="padding:4px 12px;font-size:12px" onclick="editUser(${u.id})">编辑</button>
                                 <button class="btn-admin success" style="padding:4px 12px;font-size:12px" onclick="adminAddBalance(${u.id})">充值</button>
-                                <button class="btn-admin ${u.status === 1 ? 'danger' : 'success'}" style="padding:4px 12px;font-size:12px" onclick="adminToggleUser(${u.id}, ${u.status === 1 ? 0 : 1})">${u.status === 1 ? '封禁' : '解封'}</button>
+                                ${isAdmin ? '' : `<button class="btn-admin ${u.status === 1 ? 'danger' : 'success'}" style="padding:4px 12px;font-size:12px" onclick="adminToggleUser(${u.id}, ${u.status === 1 ? 0 : 1})">${u.status === 1 ? '封禁' : '解封'}</button>`}
                             </td>
-                        </tr>`).join('')}
+                        </tr>`}).join('')}
                     </tbody>
                 </table>
             </div>
@@ -977,11 +980,17 @@ function editUser(id) {
         container.innerHTML = `
             <div class="modal-overlay" style="display:flex;position:fixed;z-index:3000">
                 <div class="modal-box" style="max-width:480px">
-                    <button class="modal-close" onclick="container.innerHTML=''">&times;</button>
+                    <button class="modal-close" onclick="closeModalByContainer('userFormContainer')">&times;</button>
                     <h2>编辑用户</h2>
                     <div class="admin-form-group"><label>用户名</label><input type="text" id="editUsername" value="${user.username}"></div>
                     <div class="admin-form-group"><label>手机号</label><input type="text" id="editPhone" value="${user.phone || ''}"></div>
                     <div class="admin-form-group"><label>QQ号</label><input type="text" id="editQQ" value="${user.qq || ''}"></div>
+                    ${user.role === 'admin' ? `
+                    <div class="admin-form-group">
+                        <label>角色</label>
+                        <div style="padding:8px 12px;background:#fff5f5;border:1px solid #fecaca;border-radius:6px;color:#f5576c;font-weight:600">管理员（不可更改）</div>
+                    </div>
+                    ` : `
                     <div class="admin-form-group">
                         <label>代理等级</label>
                         <select id="editAgentLevel" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px">
@@ -991,6 +1000,7 @@ function editUser(id) {
                             <option value="3" ${user.agent_level == 3 ? 'selected' : ''}>金牌代理</option>
                         </select>
                     </div>
+                    `}
                     <div class="admin-form-group">
                         <label>账号状态</label>
                         <select id="editStatus" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px">
@@ -1007,13 +1017,15 @@ function editUser(id) {
 
 async function saveUserEdit(id) {
     try {
-        await api(`/admin/users/${id}`, 'PUT', {
+        const payload = {
             username: $('editUsername').value.trim(),
             phone: $('editPhone').value.trim(),
             qq: $('editQQ').value.trim(),
-            agent_level: parseInt($('editAgentLevel').value),
             status: parseInt($('editStatus').value)
-        });
+        };
+        const agentLevelEl = $('editAgentLevel');
+        if (agentLevelEl) payload.agent_level = parseInt(agentLevelEl.value);
+        await api(`/admin/users/${id}`, 'PUT', payload);
         showToast('保存成功', 'success');
         $('userFormContainer').innerHTML = '';
         loadAdminUsers();
@@ -1121,7 +1133,7 @@ function showProductForm(product = null) {
     container.innerHTML = `
         <div class="modal-overlay" style="display:flex;position:fixed;z-index:3000">
             <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto">
-                <button class="modal-close" onclick="container.innerHTML=''">&times;</button>
+                <button class="modal-close" onclick="closeModalByContainer('productFormContainer')">&times;</button>
                 <h2>${product ? '编辑商品' : '添加商品'}</h2>
                 <div class="admin-form-group"><label>标题</label><input type="text" id="prodTitle" value="${product?.title || ''}"></div>
                 <div class="admin-form-group"><label>描述</label><textarea id="prodDesc" rows="2">${product?.description || ''}</textarea></div>
