@@ -14,6 +14,7 @@ let bannerTimer = null;
 
 // ===== 工具函数 =====
 function $(id) { return document.getElementById(id); }
+function val(id) { const el = $(id); return el ? (el.value || '').trim() : ''; }
 function showToast(msg, type = '') {
     const toast = $('toast');
     toast.textContent = msg;
@@ -1523,15 +1524,15 @@ async function handleImageUpload(input, urlInputId, previewId) {
 async function savePaySettings() {
     try {
         await api('/admin/pay-settings', 'PUT', {
-            pay_title: $('paySetTitle').value.trim(),
-            pay_tip: $('paySetTip').value.trim(),
-            wechat_qr: $('payWechatQr').value.trim(),
-            alipay_qr: $('payAlipayQr').value.trim(),
-            wechat_account: $('payWechatAccount').value.trim(),
-            alipay_account: $('payAlipayAccount').value.trim(),
-            success_title: $('paySuccessTitle').value.trim(),
-            success_content: $('paySuccessContent').value.trim(),
-            success_redirect_url: $('paySuccessRedirect').value.trim(),
+            pay_title: val('paySetTitle'),
+            pay_tip: val('paySetTip'),
+            wechat_qr: val('payWechatQr'),
+            alipay_qr: val('payAlipayQr'),
+            wechat_account: val('payWechatAccount'),
+            alipay_account: val('payAlipayAccount'),
+            success_title: val('paySuccessTitle'),
+            success_content: val('paySuccessContent'),
+            success_redirect_url: val('paySuccessRedirect'),
         });
         showToast('保存成功', 'success');
     } catch (err) {
@@ -1596,15 +1597,16 @@ async function loadAdminSiteSettings() {
 
 async function saveSiteSettings() {
     try {
+        const maintenanceModeEl = $('maintenanceMode');
         await api('/admin/site-settings', 'PUT', {
-            site_name: $('siteName').value.trim(),
-            site_desc: $('siteDesc').value.trim(),
-            service_phone: $('sitePhone').value.trim(),
-            service_qq: $('siteQQ').value.trim(),
-            footer_text: $('siteFooter').value.trim(),
-            maintenance_mode: $('maintenanceMode').checked ? 1 : 0,
-            maintenance_title: $('maintenanceTitle').value.trim(),
-            maintenance_content: $('maintenanceContent').value.trim(),
+            site_name: val('siteName'),
+            site_desc: val('siteDesc'),
+            service_phone: val('sitePhone'),
+            service_qq: val('siteQQ'),
+            footer_text: val('siteFooter'),
+            maintenance_mode: maintenanceModeEl?.checked ? 1 : 0,
+            maintenance_title: val('maintenanceTitle'),
+            maintenance_content: val('maintenanceContent'),
         });
         showToast('保存成功', 'success');
     } catch (err) {
