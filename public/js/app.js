@@ -1805,8 +1805,20 @@ async function init() {
     handleQQCallback();
     navigate('home'); // 先显示页面框架
     
-    // 并行加载数据
-    loadBanners().then(() => initBanner());
+    // 先初始化Banner（用静态默认值）
+    initBanner();
+    // 异步加载Banner数据，加载完后重新初始化
+    loadBanners().then(() => {
+        // 清除旧定时器和dots
+        if (bannerTimer) clearInterval(bannerTimer);
+        $('bannerDots').innerHTML = '';
+        bannerIndex = 0;
+        initBanner();
+    }).catch(() => {
+        // 加载失败保持默认Banner
+    });
+    
+    // 并行加载其他数据
     loadAnnouncements();
     loadCategories();
     loadProducts();
