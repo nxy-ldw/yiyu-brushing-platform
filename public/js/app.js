@@ -242,6 +242,51 @@ function prevBanner() {
     goToBanner(bannerIndex - 1);
 }
 
+// ===== 站点信息（页脚等） =====
+async function loadSiteInfo() {
+    try {
+        const data = await api('/site/info', 'GET', null, false);
+        const s = data.settings || {};
+        if (s.site_name) {
+            const el = $('footerSiteName');
+            if (el) el.textContent = s.site_name;
+        }
+        if (s.site_desc) {
+            const el = $('footerSiteDesc');
+            if (el) el.textContent = s.site_desc;
+        }
+        // 关于我们
+        const aboutEl = $('footerAboutUs');
+        if (aboutEl) {
+            const lines = [];
+            if (s.about_company) lines.push(s.about_company);
+            if (s.about_phone) lines.push('电话：' + s.about_phone);
+            if (s.about_qq) lines.push('QQ：' + s.about_qq);
+            if (lines.length) {
+                aboutEl.innerHTML = lines.map(l => `<p>${l}</p>`).join('');
+            }
+        }
+        // 支付说明
+        const payEl = $('footerPaymentNote');
+        if (payEl && s.payment_note) {
+            const lines = s.payment_note.split('\n').filter(l => l.trim());
+            if (lines.length) {
+                payEl.innerHTML = lines.map(l => `<p>${l}</p>`).join('');
+            }
+        }
+        // 版权
+        const copyEl = $('footerCopyright');
+        if (copyEl && s.footer_text) {
+            const year = new Date().getFullYear();
+            copyEl.innerHTML = `&copy; ${year} ${s.site_name || '一屿刷课平台'} - ${s.footer_text} | 仅供学习交流使用`;
+        }
+        // 网站标题
+        if (s.site_name) {
+            document.title = s.site_name;
+        }
+    } catch {}
+}
+
 // ===== 公告 =====
 async function loadAnnouncements() {
     try {
@@ -2265,6 +2310,24 @@ async function loadAdminSiteSettings() {
                     <label>底部版权文字</label>
                     <input type="text" id="siteFooter" value="${s.footer_text || ''}" placeholder="一屿文化出品">
                 </div>
+                <div class="admin-form-group">
+                    <label>关于我们-公司名称</label>
+                    <input type="text" id="aboutCompany" value="${s.about_company || ''}" placeholder="一屿文化出品">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                    <div class="admin-form-group">
+                        <label>关于我们-联系电话</label>
+                        <input type="text" id="aboutPhone" value="${s.about_phone || ''}" placeholder="17712328993">
+                    </div>
+                    <div class="admin-form-group">
+                        <label>关于我们-联系QQ</label>
+                        <input type="text" id="aboutQQ" value="${s.about_qq || ''}" placeholder="2947543703">
+                    </div>
+                </div>
+                <div class="admin-form-group">
+                    <label>支付说明（每行一条）</label>
+                    <textarea id="paymentNote" rows="3" placeholder="请一定按页面显示金额付款&#10;多付少付都不能到账&#10;付错无法处理">${s.payment_note || ''}</textarea>
+                </div>
                 <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
                 <h4 style="margin-bottom:16px">维护模式</h4>
                 <div class="admin-form-group" style="display:flex;align-items:center;gap:12px">
@@ -2298,11 +2361,17 @@ async function saveSiteSettings() {
             service_phone: val('sitePhone'),
             service_qq: val('siteQQ'),
             footer_text: val('siteFooter'),
+            about_company: val('aboutCompany'),
+            about_phone: val('aboutPhone'),
+            about_qq: val('aboutQQ'),
+            payment_note: val('paymentNote'),
             maintenance_mode: maintenanceModeEl?.checked ? 1 : 0,
             maintenance_title: val('maintenanceTitle'),
             maintenance_content: val('maintenanceContent'),
         });
         showToast('保存成功', 'success');
+        // 保存后刷新页脚
+        loadSiteInfo();
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -2613,6 +2682,7 @@ async function init() {
     loadCategories();
     loadProducts();
     loadQQGroups();
+    loadSiteInfo();
     
     // 登录和维护模式检查（需要等待）
     await checkLogin();

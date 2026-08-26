@@ -672,6 +672,28 @@ app.post('/api/redeem', authMiddleware, async (req, res) => {
 
 // ===================== 公告/Banner/其他 =====================
 
+// 公开站点信息（页脚用）
+app.get('/api/site/info', async (req, res) => {
+  try {
+    const settings = store.findOne('site_settings', { id: 1 }) || {};
+    // 只返回公开字段，不返回敏感信息
+    const publicSettings = {
+      site_name: settings.site_name || '',
+      site_desc: settings.site_desc || '',
+      service_phone: settings.service_phone || '',
+      service_qq: settings.service_qq || '',
+      footer_text: settings.footer_text || '',
+      about_company: settings.about_company || '',
+      about_phone: settings.about_phone || '',
+      about_qq: settings.about_qq || '',
+      payment_note: settings.payment_note || ''
+    };
+    res.json({ settings: publicSettings });
+  } catch (err) {
+    res.status(500).json({ error: '获取站点信息失败' });
+  }
+});
+
 app.get('/api/announcements', async (req, res) => {
   try {
     const result = store.findMany('announcements', { status: 1 }, { sort: { sort_order: 'asc' } });
@@ -1178,13 +1200,17 @@ app.get('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req,
 
 app.put('/api/admin/site-settings', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const { site_name, site_desc, service_phone, service_qq, footer_text, maintenance_mode, maintenance_title, maintenance_content } = req.body;
+    const { site_name, site_desc, service_phone, service_qq, footer_text, about_company, about_phone, about_qq, payment_note, maintenance_mode, maintenance_title, maintenance_content } = req.body;
     const updates = { updated_at: new Date().toISOString() };
     if (site_name !== undefined) updates.site_name = site_name;
     if (site_desc !== undefined) updates.site_desc = site_desc;
     if (service_phone !== undefined) updates.service_phone = service_phone;
     if (service_qq !== undefined) updates.service_qq = service_qq;
     if (footer_text !== undefined) updates.footer_text = footer_text;
+    if (about_company !== undefined) updates.about_company = about_company;
+    if (about_phone !== undefined) updates.about_phone = about_phone;
+    if (about_qq !== undefined) updates.about_qq = about_qq;
+    if (payment_note !== undefined) updates.payment_note = payment_note;
     if (maintenance_mode !== undefined) updates.maintenance_mode = maintenance_mode ? 1 : 0;
     if (maintenance_title !== undefined) updates.maintenance_title = maintenance_title;
     if (maintenance_content !== undefined) updates.maintenance_content = maintenance_content;
