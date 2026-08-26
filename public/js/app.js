@@ -12,6 +12,28 @@ let selectedRechargeAmount = null;
 let bannerIndex = 0;
 let bannerTimer = null;
 
+// ===== 缓存系统 =====
+const cache = {
+    _data: {},
+    _ttl: 5 * 60 * 1000, // 5分钟缓存
+    get(key) {
+        const item = this._data[key];
+        if (!item) return null;
+        if (Date.now() - item.time > this._ttl) {
+            delete this._data[key];
+            return null;
+        }
+        return item.value;
+    },
+    set(key, value) {
+        this._data[key] = { value, time: Date.now() };
+    },
+    clear(key) {
+        if (key) delete this._data[key];
+        else this._data = {};
+    }
+};
+
 // ===== 工具函数 =====
 function $(id) { return document.getElementById(id); }
 function val(id) { const el = $(id); return el ? (el.value || '').trim() : ''; }
@@ -25,12 +47,21 @@ function fmtPrice(p) { return parseFloat(p).toFixed(4).replace(/0+$/, '').replac
 function fmtDate(d) { return new Date(d).toLocaleString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }
 function authHeaders() { return token ? { Authorization: 'Bearer ' + token } : {}; }
 
-async function api(path, method = 'GET', body = null) {
+async function api(path, method = 'GET', body = null, useCache = true) {
+    // GET请求支持缓存
+    if (method === 'GET' && useCache) {
+        const cached = cache.get(path);
+        if (cached) return cached;
+    }
     const opts = { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(API + path, opts);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '请求失败');
+    // GET请求缓存结果
+    if (method === 'GET' && useCache) {
+        cache.set(path, data);
+    }
     return data;
 }
 
@@ -238,7 +269,7 @@ async function loadProducts(keyword = '') {
             return `
             <div class="product-card" onclick="showOrderModal(${p.id})">
                 <div class="product-img">
-                    ${p.image ? `<img src="${p.image}" style="width:100%;height:100%;object-fit:cover">` : `<div class="product-img-placeholder">${p.title.charAt(0)}</div>`}
+                    ${p.image ? `<img data-src="${p.image}" class="lazy-img" style="width:100%;height:100%;object-fit:cover;background:linear-gradient(135deg,#f0f0f5,#e8e8f0)">` : `<div class="product-img-placeholder">${p.title.charAt(0)}</div>`}
                     ${p.is_hot ? '<div class="product-badge hot">热销</div>' : ''}
                     ${p.is_new ? '<div class="product-badge new">新品</div>' : ''}
                 </div>
@@ -255,9 +286,36 @@ async function loadProducts(keyword = '') {
                 </div>
             </div>
         `}).join('');
+        initLazyImages();
     } catch (err) {
         grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f5576c">加载失败</div>';
     }
+}
+
+// 图片懒加载
+let lazyObserver = null;
+function initLazyImages() {
+    if (!('IntersectionObserver' in window)) {
+        // 不支持则直接加载所有图片
+        document.querySelectorAll('.lazy-img').forEach(img => {
+            img.src = img.dataset.src;
+            img.classList.remove('lazy-img');
+        });
+        return;
+    }
+    if (!lazyObserver) {
+        lazyObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    img.src = img.dataset.src;
+                    img.classList.remove('lazy-img');
+                    lazyObserver.unobserve(img);
+                }
+            });
+        }, { rootMargin: '100px' });
+    }
+    document.querySelectorAll('.lazy-img').forEach(img => lazyObserver.observe(img));
 }
 
 function getProductPrice(product) {
@@ -1745,15 +1803,18 @@ function handleQQCallback() {
 // ===== 初始化 =====
 async function init() {
     handleQQCallback();
-    await loadBanners();
-    initBanner();
-    await checkLogin();
-    await checkMaintenanceMode();
+    navigate('home'); // 先显示页面框架
+    
+    // 并行加载数据
+    loadBanners().then(() => initBanner());
     loadAnnouncements();
     loadCategories();
     loadProducts();
     loadQQGroups();
-    navigate('home');
+    
+    // 登录和维护模式检查（需要等待）
+    await checkLogin();
+    checkMaintenanceMode();
 }
 
 // 加载Banner
