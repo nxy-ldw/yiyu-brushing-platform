@@ -618,14 +618,18 @@ function updatePayQr(settings) {
 
 async function confirmPaySuccess() {
     if (!currentRechargeId) { showToast('充值订单不存在', 'error'); return; }
+    const txnId = $('payTxnId').value.trim();
+    if (!txnId) { showToast('请输入交易单号', 'error'); return; }
     try {
         const data = await api('/recharge/confirm', 'POST', { 
             rechargeId: currentRechargeId,
-            payMethod: currentPayMethod || 'wechat'
+            payMethod: currentPayMethod || 'wechat',
+            txnId: txnId
         });
         showToast(data.message, 'success');
         currentRechargeId = null;
         selectedRechargeAmount = null;
+        $('payTxnId').value = '';
         await refreshUser();
         navigate('pay-success');
     } catch (err) {
@@ -720,7 +724,7 @@ async function submitWithdraw() {
 
 async function loadWithdrawRecords() {
     try {
-        const data = await api('/withdrawals', false);
+        const data = await api('/withdrawals', 'GET', null, false);
         const statusMap = {
             'pending': { text: '待审核', color: '#f59e0b' },
             'approved': { text: '已通过', color: '#10b981' },
@@ -1593,7 +1597,7 @@ async function loadAdminRecharges() {
     const content = $('adminContent');
     content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
     try {
-        const data = await api('/admin/recharges?status=' + rechargeFilter, false); // 不缓存
+        const data = await api('/admin/recharges?status=' + rechargeFilter, 'GET', null, false); // 不缓存
         const statusMap = {
             'pending': { text: '待支付', color: '#999' },
             'waiting_confirm': { text: '待审核', color: '#f59e0b' },
@@ -1613,9 +1617,9 @@ async function loadAdminRecharges() {
             </div>
             <div class="admin-table">
                 <table>
-                    <thead><tr><th>ID</th><th>用户</th><th>手机号</th><th>金额</th><th>赠送</th><th>支付方式</th><th>状态</th><th>提交时间</th><th>操作</th></tr></thead>
+                    <thead><tr><th>ID</th><th>用户</th><th>手机号</th><th>金额</th><th>赠送</th><th>支付方式</th><th>交易单号</th><th>状态</th><th>提交时间</th><th>操作</th></tr></thead>
                     <tbody>
-                        ${data.recharges.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:40px;color:#999">暂无数据</td></tr>' : 
+                        ${data.recharges.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:40px;color:#999">暂无数据</td></tr>' : 
                         data.recharges.map(r => {
                             const st = statusMap[r.status] || { text: r.status, color: '#999' };
                             return `<tr>
@@ -1625,6 +1629,7 @@ async function loadAdminRecharges() {
                                 <td style="font-weight:600;color:#f5576c">¥${parseFloat(r.amount).toFixed(2)}</td>
                                 <td>¥${parseFloat(r.bonus || 0).toFixed(2)}</td>
                                 <td>${methodMap[r.method] || r.method || '-'}</td>
+                                <td style="font-size:12px;color:#666;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.txn_id || ''}">${r.txn_id || '-'}</td>
                                 <td><span style="color:${st.color};font-weight:500">${st.text}</span></td>
                                 <td>${fmtDate(r.created_at)}</td>
                                 <td>
@@ -1683,7 +1688,7 @@ async function loadAdminWithdrawals() {
     const content = $('adminContent');
     content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
     try {
-        const data = await api('/admin/withdrawals?status=' + withdrawFilter, false);
+        const data = await api('/admin/withdrawals?status=' + withdrawFilter, 'GET', null, false);
         const statusMap = {
             'pending': { text: '待审核', color: '#f59e0b' },
             'approved': { text: '已通过', color: '#10b981' },
@@ -1747,7 +1752,7 @@ function filterWithdrawals(status) {
 
 async function viewWithdraw(id) {
     try {
-        const data = await api('/admin/withdrawals?status=all', false);
+        const data = await api('/admin/withdrawals?status=all', 'GET', null, false);
         const w = data.withdrawals.find(x => x.id === id);
         if (!w) return;
         const statusMap = {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>一屿刷课平台</title>
-    <link rel="stylesheet" href="/css/style.css?v=20260826v2">
+    <link rel="stylesheet" href="/css/style.css?v=20260827">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
 </head>
@@ -272,6 +272,11 @@
                             </div>
                         </div>
                         <div class="pay-tip" id="payTip">请扫描上方二维码完成支付</div>
+                        <div class="pay-txn-form" style="margin-bottom:16px">
+                            <div style="font-size:13px;color:#666;margin-bottom:8px;font-weight:500">请输入支付交易单号（必填）</div>
+                            <input type="text" id="payTxnId" placeholder="请输入微信/支付宝交易单号" style="width:100%;padding:10px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:14px;box-sizing:border-box">
+                            <div style="font-size:11px;color:#999;margin-top:6px">在支付记录中找到交易单号，填写后管理员才能审核</div>
+                        </div>
                         <div class="pay-actions">
                             <button class="btn-secondary" onclick="navigate('recharge')">返回充值</button>
                             <button class="btn-primary" onclick="confirmPaySuccess()">我已支付</button>
@@ -552,6 +557,6 @@
         </svg>
     </div>
 
-    <script src="/js/app.js?v=20260826v2"></script>
+    <script src="/js/app.js?v=20260827"></script>
 </body>
 </html>

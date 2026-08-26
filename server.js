@@ -353,14 +353,16 @@ app.post('/api/recharge', authMiddleware, async (req, res) => {
 
 app.post('/api/recharge/confirm', authMiddleware, async (req, res) => {
   try {
-    const { rechargeId, payMethod } = req.body;
+    const { rechargeId, payMethod, txnId } = req.body;
     const recharge = store.findOne('recharges', { id: parseInt(rechargeId), user_id: req.user.id, status: 'pending' });
     if (!recharge) return res.status(400).json({ error: '充值订单不存在或已处理' });
+    if (!txnId) return res.status(400).json({ error: '请输入交易单号' });
 
     // 改为待审核状态，等待管理员确认
     store.update('recharges', { id: recharge.id }, { 
       status: 'waiting_confirm',
       method: payMethod || recharge.method || 'wechat',
+      txn_id: txnId,
       confirm_at: new Date().toISOString()
     });
 
