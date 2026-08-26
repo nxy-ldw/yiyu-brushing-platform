@@ -1,0 +1,1137 @@
+// ===== 全局状态 =====
+const API = '/api';
+let token = localStorage.getItem('yy_token') || '';
+let currentUser = null;
+let currentPage = 'home';
+let currentCategory = '全部';
+let currentSort = 'default';
+let currentOrderStatus = 'all';
+let currentProductId = null;
+let currentRechargeId = null;
+let selectedRechargeAmount = null;
+let bannerIndex = 0;
+let bannerTimer = null;
+
+// ===== 工具函数 =====
+function $(id) { return document.getElementById(id); }
+function showToast(msg, type = '') {
+    const toast = $('toast');
+    toast.textContent = msg;
+    toast.className = 'toast show ' + type;
+    setTimeout(() => toast.className = 'toast', 2500);
+}
+function fmtPrice(p) { return parseFloat(p).toFixed(4).replace(/0+$/, '').replace(/\.$/, ''); }
+function fmtDate(d) { return new Date(d).toLocaleString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+function authHeaders() { return token ? { Authorization: 'Bearer ' + token } : {}; }
+
+async function api(path, method = 'GET', body = null) {
+    const opts = { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(API + path, opts);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '请求失败');
+    return data;
+}
+
+// ===== 页面导航 =====
+function navigate(page) {
+    currentPage = page;
+    document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+    const pageEl = $('page-' + page);
+    if (pageEl) {
+        pageEl.style.display = 'block';
+        pageEl.classList.add('active');
+    }
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const navMap = { 'home': 0, 'group-buy': 1, 'red-packet': 2, 'redeem': 3, 'progress': 4, 'orders': 5 };
+    const navItems = document.querySelectorAll('.nav-item');
+    if (navMap[page] !== undefined && navItems[navMap[page]]) navItems[navMap[page]].classList.add('active');
+
+    if (page === 'orders') loadOrders();
+    else if (page === 'recharge') loadRecharge();
+    else if (page === 'messages') loadMessages();
+    else if (page === 'progress') loadProgress();
+    else if (page === 'group-buy') loadGroupBuys();
+    else if (page === 'red-packet') loadRedPackets();
+    else if (page === 'admin') loadAdmin();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ===== 认证 =====
+async function checkLogin() {
+    if (!token) return;
+    try {
+        const data = await api('/auth/me');
+        currentUser = data.user;
+        updateUserUI();
+    } catch {
+        token = '';
+        localStorage.removeItem('yy_token');
+    }
+}
+
+function updateUserUI() {
+    if (currentUser) {
+        $('userArea').style.display = 'none';
+        $('userInfo').style.display = 'flex';
+        $('userBalance').textContent = parseFloat(currentUser.balance).toFixed(2);
+        $('dropdownUsername').textContent = currentUser.username;
+        if (currentUser.role === 'admin') $('adminLink').style.display = 'block';
+        if (currentUser.avatar) {
+            $('userAvatar').innerHTML = `<img src="${currentUser.avatar}" style="width:36px;height:36px;border-radius:50%">`;
+        }
+    } else {
+        $('userArea').style.display = 'flex';
+        $('userInfo').style.display = 'none';
+    }
+}
+
+function toggleUserMenu() { $('dropdownMenu').classList.toggle('show'); }
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#userDropdown')) $('dropdownMenu').classList.remove('show');
+});
+
+function showLoginModal() { $('loginModal').style.display = 'flex'; }
+function showRegisterModal() { $('registerModal').style.display = 'flex'; }
+function closeModal(id) { $(id).style.display = 'none'; }
+
+async function doLogin() {
+    const username = $('loginUsername').value.trim();
+    const password = $('loginPassword').value.trim();
+    if (!username || !password) { showToast('请填写用户名和密码', 'error'); return; }
+    try {
+        const data = await api('/auth/login', 'POST', { username, password });
+        token = data.token;
+        localStorage.setItem('yy_token', token);
+        currentUser = data.user;
+        updateUserUI();
+        closeModal('loginModal');
+        showToast('登录成功', 'success');
+        $('loginUsername').value = '';
+        $('loginPassword').value = '';
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function doRegister() {
+    const username = $('regUsername').value.trim();
+    const password = $('regPassword').value.trim();
+    const phone = $('regPhone').value.trim();
+    const qq = $('regQQ').value.trim();
+    if (!username || !password) { showToast('请填写用户名和密码', 'error'); return; }
+    if (username.length < 3) { showToast('用户名至少3个字符', 'error'); return; }
+    if (password.length < 6) { showToast('密码至少6个字符', 'error'); return; }
+    try {
+        const data = await api('/auth/register', 'POST', { username, password, phone, qq });
+        token = data.token;
+        localStorage.setItem('yy_token', token);
+        currentUser = data.user;
+        updateUserUI();
+        closeModal('registerModal');
+        showToast('注册成功', 'success');
+        $('regUsername').value = ''; $('regPassword').value = ''; $('regPhone').value = ''; $('regQQ').value = '';
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function qqLogin() {
+    try {
+        const data = await api('/auth/qq/redirect');
+        if (data.authUrl) {
+            window.open(data.authUrl, '_blank');
+        } else {
+            showToast('QQ登录暂未配置，请联系管理员', 'error');
+        }
+    } catch {
+        showToast('QQ登录暂不可用', 'error');
+    }
+}
+
+function logout() {
+    token = '';
+    currentUser = null;
+    localStorage.removeItem('yy_token');
+    updateUserUI();
+    $('dropdownMenu').classList.remove('show');
+    navigate('home');
+    showToast('已退出登录');
+}
+
+// ===== 轮播图 =====
+function initBanner() {
+    const slides = document.querySelectorAll('.banner-slide');
+    const dots = $('bannerDots');
+    slides.forEach((_, i) => {
+        const dot = document.createElement('span');
+        if (i === 0) dot.classList.add('active');
+        dot.onclick = () => goToBanner(i);
+        dots.appendChild(dot);
+    });
+    startBannerTimer();
+}
+function startBannerTimer() {
+    if (bannerTimer) clearInterval(bannerTimer);
+    bannerTimer = setInterval(() => nextBanner(), 5000);
+}
+function goToBanner(idx) {
+    const slides = document.querySelectorAll('.banner-slide');
+    const dots = $('bannerDots').children;
+    slides.forEach(s => s.classList.remove('active'));
+    dots.forEach(d => d.classList.remove('active'));
+    bannerIndex = idx;
+    slides[idx].classList.add('active');
+    dots[idx].classList.add('active');
+    startBannerTimer();
+}
+function nextBanner() { goToBanner((bannerIndex + 1) % document.querySelectorAll('.banner-slide').length); }
+function prevBanner() { goToBanner((bannerIndex - 1 + document.querySelectorAll('.banner-slide').length) % document.querySelectorAll('.banner-slide').length); }
+
+// ===== 公告 =====
+async function loadAnnouncements() {
+    try {
+        const data = await api('/announcements');
+        if (data.announcements.length > 0) {
+            $('announcementContent').textContent = data.announcements[0].content;
+        }
+    } catch {}
+}
+
+// ===== 分类 =====
+async function loadCategories() {
+    try {
+        const data = await api('/categories');
+        const nav = $('categoryNav');
+        nav.innerHTML = '';
+        data.categories.forEach(cat => {
+            const item = document.createElement('div');
+            item.className = 'category-item' + (cat.name === currentCategory ? ' active' : '');
+            item.textContent = cat.name;
+            item.onclick = () => {
+                currentCategory = cat.name;
+                document.querySelectorAll('.category-item').forEach(c => c.classList.remove('active'));
+                item.classList.add('active');
+                loadProducts();
+            };
+            nav.appendChild(item);
+        });
+    } catch {}
+}
+
+// ===== 商品 =====
+async function loadProducts(keyword = '') {
+    const grid = $('productsGrid');
+    grid.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        let url = `/products?category=${encodeURIComponent(currentCategory)}&sort=${currentSort}`;
+        if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+        const data = await api(url);
+        if (data.products.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999">暂无商品</div>';
+            return;
+        }
+        grid.innerHTML = data.products.map(p => `
+            <div class="product-card" onclick="showOrderModal(${p.id})">
+                <div class="product-img">
+                    ${p.image ? `<img src="${p.image}" style="width:100%;height:100%;object-fit:cover">` : `<div class="product-img-placeholder">${p.title.charAt(0)}</div>`}
+                    ${p.is_hot ? '<div class="product-badge hot">热销</div>' : ''}
+                    ${p.is_new ? '<div class="product-badge new">新品</div>' : ''}
+                </div>
+                <div class="product-info">
+                    <div class="product-title">${p.title}</div>
+                    <div class="product-meta">
+                        <span class="product-price">¥${fmtPrice(p.price)}</span>
+                        <span class="product-sales">已售${p.sales}+</span>
+                    </div>
+                    <div class="product-footer">
+                        <span class="product-stock">库存${p.stock === 999999 ? '无限' : p.stock}</span>
+                        <button class="btn-buy" onclick="event.stopPropagation();showOrderModal(${p.id})">立即购买</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (err) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+function sortProducts(sort, btn) {
+    currentSort = sort;
+    document.querySelectorAll('.sort-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    loadProducts();
+}
+
+function handleSearch(e) { if (e.key === 'Enter') doSearch(); }
+function doSearch() {
+    const keyword = $('searchInput').value.trim();
+    loadProducts(keyword);
+}
+
+// ===== 下单 =====
+async function showOrderModal(productId) {
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    try {
+        const data = await api(`/products/${productId}`);
+        const p = data.product;
+        currentProductId = productId;
+        $('orderProductInfo').innerHTML = `
+            <div style="display:flex;gap:12px;margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px">
+                <div style="width:60px;height:60px;background:linear-gradient(135deg,#f0f0f5,#e8e8f0);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--primary);opacity:.2">${p.title.charAt(0)}</div>
+                <div style="flex:1">
+                    <div style="font-weight:600;font-size:14px">${p.title}</div>
+                    <div style="color:var(--accent);font-weight:700;margin-top:4px">¥${fmtPrice(p.price)}</div>
+                </div>
+            </div>`;
+        $('orderQty').value = 1;
+        $('orderTotal').textContent = fmtPrice(p.price) + '元';
+        $('orderAccount').value = '';
+        $('orderPassword').value = '';
+        $('orderRemark').value = '';
+        $('orderModal').style.display = 'flex';
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+function changeQty(delta) {
+    const input = $('orderQty');
+    let val = parseInt(input.value) + delta;
+    if (val < 1) val = 1;
+    input.value = val;
+    updateOrderTotal();
+}
+async function updateOrderTotal() {
+    if (!currentProductId) return;
+    try {
+        const data = await api(`/products/${currentProductId}`);
+        const qty = parseInt($('orderQty').value) || 1;
+        const total = parseFloat(data.product.price) * qty;
+        $('orderTotal').textContent = fmtPrice(total) + '元';
+    } catch {}
+}
+
+async function createOrder() {
+    if (!currentUser) { showToast('请先登录', 'error'); return; }
+    const account = $('orderAccount').value.trim();
+    const passwordHint = $('orderPassword').value.trim();
+    const remark = $('orderRemark').value.trim();
+    const quantity = parseInt($('orderQty').value) || 1;
+    if (!account) { showToast('请填写刷课账号', 'error'); return; }
+    try {
+        const data = await api('/orders', 'POST', { productId: currentProductId, quantity, account, passwordHint, remark });
+        closeModal('orderModal');
+        showToast('下单成功！', 'success');
+        await refreshUser();
+        navigate('orders');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function refreshUser() {
+    try {
+        const data = await api('/auth/me');
+        currentUser = data.user;
+        updateUserUI();
+    } catch {}
+}
+
+// ===== 订单 =====
+async function loadOrders() {
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    const list = $('ordersList');
+    list.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api(`/orders?status=${currentOrderStatus}`);
+        if (data.orders.length === 0) {
+            list.innerHTML = '<div class="order-empty"><p>暂无订单</p></div>';
+            return;
+        }
+        const statusText = { 'paid': '已付款', 'processing': '处理中', 'completed': '已完成', 'cancelled': '已取消', 'pending': '待付款' };
+        list.innerHTML = data.orders.map(o => `
+            <div class="order-card">
+                <div class="order-card-header">
+                    <span>订单号：${o.order_no}</span>
+                    <span class="order-status ${o.status}">${statusText[o.status] || o.status}</span>
+                </div>
+                <div class="order-card-body">
+                    <div class="order-product">
+                        <span class="order-product-title">${o.product_title}</span>
+                        <span class="order-product-price">¥${fmtPrice(o.total)}</span>
+                    </div>
+                    <div class="order-info">账号：${o.account || '-'}</div>
+                    ${o.remark ? `<div class="order-info">备注：${o.remark}</div>` : ''}
+                    <div class="order-info">${fmtDate(o.created_at)}</div>
+                </div>
+            </div>
+        `).join('');
+    } catch (err) {
+        list.innerHTML = '<div class="order-empty"><p>加载失败</p></div>';
+    }
+}
+
+function filterOrders(status, btn) {
+    currentOrderStatus = status;
+    document.querySelectorAll('.order-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    loadOrders();
+}
+
+// ===== 进度查询 =====
+async function loadProgress() {
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    try { await searchProgress(); } catch {}
+}
+
+async function searchProgress() {
+    const list = $('progressList');
+    list.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    const orderNo = $('progressSearch').value.trim();
+    try {
+        const data = await api(`/orders/progress${orderNo ? '?orderNo=' + encodeURIComponent(orderNo) : ''}`);
+        const statusText = { 'paid': '已付款', 'processing': '处理中', 'completed': '已完成', 'cancelled': '已取消' };
+        const progressText = { 'pending': '等待中', 'processing': '处理中', 'completed': '已完成', 'cancelled': '已取消' };
+        if (data.progress.length === 0) {
+            list.innerHTML = '<div style="text-align:center;padding:40px;color:#999">暂无订单</div>';
+            return;
+        }
+        list.innerHTML = data.progress.map(p => `
+            <div class="progress-item">
+                <div class="progress-status ${p.progress}"></div>
+                <div class="progress-info">
+                    <div class="progress-order-no">${p.order_no}</div>
+                    <div class="progress-product">${p.product_title}</div>
+                    <div style="font-size:12px;color:#999">${fmtDate(p.created_at)}</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-weight:600;font-size:14px">${progressText[p.progress] || p.progress}</div>
+                    <div style="font-size:12px;color:#999">${statusText[p.status] || p.status}</div>
+                </div>
+            </div>
+        `).join('');
+    } catch (err) {
+        list.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+// ===== 充值 =====
+async function loadRecharge() {
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    $('rechargeBalance').innerHTML = parseFloat(currentUser.balance).toFixed(2) + ' <span>元</span>';
+    try {
+        const data = await api('/recharge/packages');
+        const grid = $('rechargePackages');
+        grid.innerHTML = data.packages.map(pkg => `
+            <div class="recharge-package" onclick="selectRecharge(${pkg.amount}, ${pkg.bonus}, this)">
+                <div class="recharge-amount">${pkg.amount}<span>元</span></div>
+                <div class="recharge-bonus">赠送${pkg.bonus}元</div>
+                <div class="recharge-bonus-label">到账${pkg.amount + pkg.bonus}元</div>
+            </div>
+        `).join('');
+    } catch {}
+}
+
+function selectRecharge(amount, bonus, el) {
+    document.querySelectorAll('.recharge-package').forEach(p => p.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedRechargeAmount = amount;
+    doRecharge(amount);
+}
+
+async function doRecharge(amount) {
+    if (!currentUser) { showToast('请先登录', 'error'); return; }
+    try {
+        const data = await api('/recharge', 'POST', { amount });
+        currentRechargeId = data.recharge.id;
+        $('rechargeInfo').innerHTML = `
+            <div style="text-align:center;padding:20px 0">
+                <div style="font-size:14px;color:#666">充值金额</div>
+                <div style="font-size:36px;font-weight:700;color:var(--primary)">${amount}元</div>
+                <div style="color:var(--accent);font-weight:600;margin-top:8px">赠送${data.recharge.bonus}元</div>
+                <div style="color:#999;font-size:14px;margin-top:4px">到账${parseFloat(amount) + parseFloat(data.recharge.bonus)}元</div>
+            </div>`;
+        $('rechargeModal').style.display = 'flex';
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function confirmRecharge() {
+    if (!currentRechargeId) { showToast('充值订单不存在', 'error'); return; }
+    try {
+        const data = await api('/recharge/confirm', 'POST', { rechargeId: currentRechargeId });
+        closeModal('rechargeModal');
+        showToast(data.message, 'success');
+        currentRechargeId = null;
+        selectedRechargeAmount = null;
+        await refreshUser();
+        loadRecharge();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// ===== 卡密兑换 =====
+async function redeemCard() {
+    const cardNo = $('cardNoInput').value.trim();
+    if (!cardNo) { showToast('请输入卡密号', 'error'); return; }
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    try {
+        const data = await api('/redeem', 'POST', { cardNo });
+        showToast(data.message, 'success');
+        $('cardNoInput').value = '';
+        await refreshUser();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// ===== 消息 =====
+async function loadMessages() {
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    const list = $('messagesList');
+    list.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/messages');
+        if (data.messages.length === 0) {
+            list.innerHTML = '<div style="text-align:center;padding:40px;color:#999">暂无消息</div>';
+            return;
+        }
+        list.innerHTML = data.messages.map(m => `
+            <div class="message-item">
+                <div class="message-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                    </svg>
+                </div>
+                <div class="message-content">
+                    <div class="message-title">${m.title}${!m.is_read ? '<span class="message-unread"></span>' : ''}</div>
+                    <div class="message-text">${m.content}</div>
+                    <div class="message-time">${fmtDate(m.created_at)}</div>
+                </div>
+            </div>
+        `).join('');
+    } catch {
+        list.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+// ===== 拼团 =====
+async function loadGroupBuys() {
+    const list = $('groupBuyList');
+    list.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/group-buys');
+        if (data.groupBuys.length === 0) {
+            list.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999">暂无拼团活动</div>';
+            return;
+        }
+        list.innerHTML = data.groupBuys.map(gb => {
+            const progress = Math.min(100, (gb.current_count / gb.required_count) * 100);
+            const remaining = Math.max(0, Math.ceil((new Date(gb.end_time) - new Date()) / 86400000));
+            return `
+            <div class="group-buy-card">
+                <div class="group-buy-info">
+                    <div style="font-weight:600;font-size:14px">${gb.title || gb.product_title || '拼团活动'}</div>
+                    <div class="group-buy-price">
+                        <span class="group-price">¥${fmtPrice(gb.group_price)}</span>
+                        <span class="original-price">¥${fmtPrice(gb.original_price)}</span>
+                    </div>
+                    <div class="group-buy-progress">
+                        <div class="group-buy-progress-bar" style="width:${progress}%"></div>
+                        <div class="group-buy-progress-text">${gb.current_count}/${gb.required_count}人</div>
+                    </div>
+                    <div class="group-buy-countdown">${remaining > 0 ? '剩余' + remaining + '天' : '即将结束'}</div>
+                </div>
+                <button class="btn-group-buy" onclick="joinGroupBuy(${gb.id})">参与拼团</button>
+            </div>`;
+        }).join('');
+    } catch {
+        list.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+function joinGroupBuy(id) {
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    showToast('拼团功能开发中', '');
+}
+
+// ===== 红包 =====
+async function loadRedPackets() {
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    const grid = $('redPacketGrid');
+    grid.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/red-packets');
+        if (data.packets.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999">暂无红包</div>';
+            return;
+        }
+        grid.innerHTML = data.packets.map(rp => `
+            <div class="red-packet-card">
+                <div class="red-packet-amount">${parseFloat(rp.amount)}<span>元</span></div>
+                <div class="red-packet-title">${rp.title || '现金红包'}</div>
+                <div class="red-packet-min">满${rp.min_spend}元可用</div>
+                <button class="btn-claim-rp" ${rp.user_status === 'unused' ? '' : 'disabled'} 
+                    onclick="${rp.user_status === 'unused' ? `claimRedPacket(${rp.id})` : ''}">
+                    ${rp.user_status === 'unused' ? '立即领取' : (rp.user_status === 'used' ? '已领取' : '已使用')}
+                </button>
+                <div style="font-size:11px;opacity:.7;margin-top:4px">剩余${rp.remaining}个</div>
+            </div>
+        `).join('');
+    } catch {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+async function claimRedPacket(id) {
+    try {
+        const data = await api('/red-packets/claim', 'POST', { packetId: id });
+        showToast(data.message, 'success');
+        await refreshUser();
+        loadRedPackets();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// ===== QQ群 =====
+async function loadQQGroups() {
+    try {
+        const data = await api('/qq-groups');
+        const section = $('qqSection');
+        section.innerHTML = `
+            <h3>客服QQ群</h3>
+            <div class="qq-groups">
+                ${data.groups.map(g => `
+                    <div class="qq-group-card">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
+                        </svg>
+                        <div>
+                            <div style="font-size:13px;color:#666">${g.name}</div>
+                            <div class="qq-no">${g.group_no}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } catch {}
+}
+
+// ===== 后台管理 =====
+function adminTab(tab, el) {
+    document.querySelectorAll('.admin-nav a').forEach(a => a.classList.remove('active'));
+    el.classList.add('active');
+    if (tab === 'dashboard') loadAdminDashboard();
+    else if (tab === 'users') loadAdminUsers();
+    else if (tab === 'products') loadAdminProducts();
+    else if (tab === 'orders') loadAdminOrders();
+    else if (tab === 'announcements') loadAdminAnnouncements();
+    else if (tab === 'banners') loadAdminBanners();
+    else if (tab === 'cards') loadAdminCards();
+    else if (tab === 'recharge') loadAdminRecharge();
+}
+
+async function loadAdmin() {
+    if (!currentUser || currentUser.role !== 'admin') { showToast('无权限', 'error'); navigate('home'); return; }
+    loadAdminDashboard();
+}
+
+async function loadAdminDashboard() {
+    const content = $('adminContent');
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/stats');
+        content.innerHTML = `
+            <div class="admin-stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:linear-gradient(135deg,#667eea,#764ba2)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
+                    </div>
+                    <div class="stat-value">${data.stats.users}</div>
+                    <div class="stat-label">总用户数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:linear-gradient(135deg,#f5576c,#fa5252)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M9 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2h-4"/><rect x="9" y="2" width="6" height="9" rx="2"/></svg>
+                    </div>
+                    <div class="stat-value">${data.stats.orders}</div>
+                    <div class="stat-label">总订单数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:linear-gradient(135deg,#43e97b,#38f9d7)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                    </div>
+                    <div class="stat-value">¥${data.stats.revenue.toFixed(2)}</div>
+                    <div class="stat-label">总交易额</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:linear-gradient(135deg,#fa8231,#f6a609)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </div>
+                    <div class="stat-value">${data.stats.todayOrders}</div>
+                    <div class="stat-label">今日订单</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:linear-gradient(135deg,#667eea,#764ba2)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M20 7L12 3 4 7m16 0l-8 4m8-4v10l-8 4-8-4V7"/></svg>
+                    </div>
+                    <div class="stat-value">${data.stats.products}</div>
+                    <div class="stat-label">商品数量</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:linear-gradient(135deg,#f5576c,#fa5252)">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                    </div>
+                    <div class="stat-value">¥${data.stats.rechargeTotal.toFixed(2)}</div>
+                    <div class="stat-label">总充值额</div>
+                </div>
+            </div>
+            <h3 style="margin:24px 0 16px;font-size:18px">最近订单</h3>
+            <div class="admin-table">
+                <table>
+                    <thead><tr><th>订单号</th><th>用户</th><th>商品</th><th>金额</th><th>状态</th><th>时间</th></tr></thead>
+                    <tbody>
+                        ${data.recentOrders.map(o => `<tr>
+                            <td>${o.order_no}</td>
+                            <td>${o.username}</td>
+                            <td>${o.product_title}</td>
+                            <td>¥${fmtPrice(o.total)}</td>
+                            <td>${o.status}</td>
+                            <td>${fmtDate(o.created_at)}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+async function loadAdminUsers() {
+    const content = $('adminContent');
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/users');
+        content.innerHTML = `
+            <h3 style="margin-bottom:16px;font-size:18px">用户管理</h3>
+            <div class="admin-toolbar">
+                <input type="text" placeholder="搜索用户名/手机/QQ" id="userSearch" onkeypress="if(event.key==='Enter')loadAdminUsersSearch()">
+                <button class="btn-admin" onclick="loadAdminUsersSearch()">搜索</button>
+            </div>
+            <div class="admin-table">
+                <table>
+                    <thead><tr><th>ID</th><th>用户名</th><th>手机</th><th>QQ</th><th>余额</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+                    <tbody>
+                        ${data.users.map(u => `<tr>
+                            <td>${u.id}</td>
+                            <td>${u.username}</td>
+                            <td>${u.phone || '-'}</td>
+                            <td>${u.qq || '-'}</td>
+                            <td>¥${parseFloat(u.balance).toFixed(2)}</td>
+                            <td>${u.role === 'admin' ? '管理员' : '用户'}</td>
+                            <td>${u.status === 1 ? '正常' : '封禁'}</td>
+                            <td>
+                                <button class="btn-admin success" style="padding:4px 12px;font-size:12px" onclick="adminAddBalance(${u.id})">充值</button>
+                                <button class="btn-admin ${u.status === 1 ? 'danger' : 'success'}" style="padding:4px 12px;font-size:12px" onclick="adminToggleUser(${u.id}, ${u.status === 1 ? 0 : 1})">${u.status === 1 ? '封禁' : '解封'}</button>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+async function loadAdminUsersSearch() {
+    const keyword = $('userSearch').value.trim();
+    const content = $('adminContent');
+    try {
+        const data = await api(`/admin/users?keyword=${encodeURIComponent(keyword)}`);
+        content.innerHTML = `
+            <h3 style="margin-bottom:16px;font-size:18px">用户管理</h3>
+            <div class="admin-toolbar">
+                <input type="text" placeholder="搜索用户名/手机/QQ" value="${keyword}" id="userSearch" onkeypress="if(event.key==='Enter')loadAdminUsersSearch()">
+                <button class="btn-admin" onclick="loadAdminUsersSearch()">搜索</button>
+            </div>
+            <div class="admin-table">
+                <table>
+                    <thead><tr><th>ID</th><th>用户名</th><th>手机</th><th>QQ</th><th>余额</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+                    <tbody>
+                        ${data.users.map(u => `<tr>
+                            <td>${u.id}</td>
+                            <td>${u.username}</td>
+                            <td>${u.phone || '-'}</td>
+                            <td>${u.qq || '-'}</td>
+                            <td>¥${parseFloat(u.balance).toFixed(2)}</td>
+                            <td>${u.role === 'admin' ? '管理员' : '用户'}</td>
+                            <td>${u.status === 1 ? '正常' : '封禁'}</td>
+                            <td>
+                                <button class="btn-admin success" style="padding:4px 12px;font-size:12px" onclick="adminAddBalance(${u.id})">充值</button>
+                                <button class="btn-admin ${u.status === 1 ? 'danger' : 'success'}" style="padding:4px 12px;font-size:12px" onclick="adminToggleUser(${u.id}, ${u.status === 1 ? 0 : 1})">${u.status === 1 ? '封禁' : '解封'}</button>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch {}
+}
+
+async function adminToggleUser(id, status) {
+    try {
+        await api(`/admin/users/${id}/status`, 'POST', { status });
+        showToast('操作成功', 'success');
+        loadAdminUsers();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function adminAddBalance(id) {
+    const amount = prompt('输入充值金额：');
+    if (!amount) return;
+    try {
+        await api(`/admin/users/${id}/balance`, 'POST', { amount: parseFloat(amount), action: 'add' });
+        showToast('充值成功', 'success');
+        loadAdminUsers();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function loadAdminProducts() {
+    const content = $('adminContent');
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/products');
+        content.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h3 style="font-size:18px">商品管理</h3>
+                <button class="btn-admin" onclick="showProductForm()">添加商品</button>
+            </div>
+            <div class="admin-table">
+                <table>
+                    <thead><tr><th>ID</th><th>标题</th><th>分类</th><th>价格</th><th>库存</th><th>销量</th><th>状态</th><th>操作</th></tr></thead>
+                    <tbody>
+                        ${data.products.map(p => `<tr>
+                            <td>${p.id}</td>
+                            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${p.title}</td>
+                            <td>${p.category}</td>
+                            <td>¥${fmtPrice(p.price)}</td>
+                            <td>${p.stock === 999999 ? '无限' : p.stock}</td>
+                            <td>${p.sales}</td>
+                            <td>${p.status === 1 ? '上架' : '下架'}</td>
+                            <td>
+                                <button class="btn-admin" style="padding:4px 12px;font-size:12px" onclick="editProduct(${p.id})">编辑</button>
+                                <button class="btn-admin danger" style="padding:4px 12px;font-size:12px" onclick="deleteProduct(${p.id})">下架</button>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <div id="productFormContainer"></div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+function showProductForm(product = null) {
+    const container = $('productFormContainer');
+    container.innerHTML = `
+        <div class="modal-overlay" style="display:flex;position:fixed;z-index:3000">
+            <div class="modal-box" style="max-width:560px">
+                <button class="modal-close" onclick="container.innerHTML=''">&times;</button>
+                <h2>${product ? '编辑商品' : '添加商品'}</h2>
+                <div class="admin-form-group"><label>标题</label><input type="text" id="prodTitle" value="${product?.title || ''}"></div>
+                <div class="admin-form-group"><label>描述</label><textarea id="prodDesc" rows="2">${product?.description || ''}</textarea></div>
+                <div class="admin-form-group"><label>价格</label><input type="number" step="0.0001" id="prodPrice" value="${product?.price || ''}"></div>
+                <div class="admin-form-group"><label>原价</label><input type="number" step="0.01" id="prodOrigPrice" value="${product?.original_price || ''}"></div>
+                <div class="admin-form-group"><label>分类</label><input type="text" id="prodCategory" value="${product?.category || '常用'}"></div>
+                <div class="admin-form-group"><label>库存</label><input type="number" id="prodStock" value="${product?.stock || 999999}"></div>
+                <div class="admin-form-group"><label>图片URL</label><input type="text" id="prodImage" value="${product?.image || ''}"></div>
+                <div class="admin-form-group" style="display:flex;gap:20px">
+                    <label><input type="checkbox" id="prodHot" ${product?.is_hot ? 'checked' : ''}> 热销</label>
+                    <label><input type="checkbox" id="prodNew" ${product?.is_new ? 'checked' : ''}> 新品</label>
+                </div>
+                <button class="btn-primary btn-full" onclick="saveProduct(${product?.id || 0})">保存</button>
+            </div>
+        </div>
+    `;
+}
+
+async function saveProduct(id) {
+    const data = {
+        title: $('prodTitle').value.trim(),
+        description: $('prodDesc').value.trim(),
+        price: parseFloat($('prodPrice').value),
+        originalPrice: $('prodOrigPrice').value ? parseFloat($('prodOrigPrice').value) : null,
+        category: $('prodCategory').value.trim() || '常用',
+        stock: parseInt($('prodStock').value) || 999999,
+        image: $('prodImage').value.trim(),
+        isHot: $('prodHot').checked,
+        isNew: $('prodNew').checked,
+        status: 1
+    };
+    if (!data.title || !data.price) { showToast('请填写标题和价格', 'error'); return; }
+    try {
+        if (id) await api(`/admin/products/${id}`, 'PUT', data);
+        else await api('/admin/products', 'POST', data);
+        showToast('保存成功', 'success');
+        $('productFormContainer').innerHTML = '';
+        loadAdminProducts();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function editProduct(id) {
+    try {
+        const data = await api(`/products/${id}`);
+        showProductForm(data.product);
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function deleteProduct(id) {
+    if (!confirm('确认下架该商品？')) return;
+    try {
+        await api(`/admin/products/${id}`, 'DELETE');
+        showToast('下架成功', 'success');
+        loadAdminProducts();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function loadAdminOrders() {
+    const content = $('adminContent');
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/orders');
+        const statusText = { 'paid': '已付款', 'processing': '处理中', 'completed': '已完成', 'cancelled': '已取消', 'pending': '待付款' };
+        content.innerHTML = `
+            <h3 style="margin-bottom:16px;font-size:18px">订单管理</h3>
+            <div class="admin-table">
+                <table>
+                    <thead><tr><th>订单号</th><th>用户</th><th>商品</th><th>账号</th><th>金额</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+                    <tbody>
+                        ${data.orders.map(o => `<tr>
+                            <td>${o.order_no}</td>
+                            <td>${o.username}</td>
+                            <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis">${o.product_title}</td>
+                            <td>${o.account || '-'}</td>
+                            <td>¥${fmtPrice(o.total)}</td>
+                            <td>${statusText[o.status] || o.status}</td>
+                            <td>${fmtDate(o.created_at)}</td>
+                            <td>
+                                <select onchange="updateOrderStatus(${o.id}, this.value)" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px">
+                                    <option value="">状态</option>
+                                    <option value="processing">处理中</option>
+                                    <option value="completed">已完成</option>
+                                    <option value="cancelled">取消</option>
+                                </select>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+async function updateOrderStatus(id, status) {
+    if (!status) return;
+    try {
+        await api(`/admin/orders/${id}/status`, 'POST', { status });
+        showToast('更新成功', 'success');
+        loadAdminOrders();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function loadAdminAnnouncements() {
+    const content = $('adminContent');
+    content.innerHTML = `
+        <h3 style="margin-bottom:16px;font-size:18px">公告管理</h3>
+        <div class="admin-form-group"><label>标题</label><input type="text" id="annTitle" placeholder="公告标题"></div>
+        <div class="admin-form-group"><label>内容</label><textarea id="annContent" rows="3" placeholder="公告内容"></textarea></div>
+        <button class="btn-admin" onclick="createAnnouncement()">发布公告</button>
+        <h4 style="margin:24px 0 12px">已有公告</h4>
+        <div class="admin-table" id="annTable"><div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div></div>
+    `;
+    try {
+        const data = await api('/announcements');
+        $('annTable').innerHTML = `
+            <table>
+                <thead><tr><th>ID</th><th>标题</th><th>内容</th><th>操作</th></tr></thead>
+                <tbody>
+                    ${data.announcements.map(a => `<tr>
+                        <td>${a.id}</td>
+                        <td>${a.title || '-'}</td>
+                        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">${a.content}</td>
+                        <td><button class="btn-admin danger" style="padding:4px 12px;font-size:12px" onclick="deleteAnnouncement(${a.id})">删除</button></td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch {}
+}
+
+async function createAnnouncement() {
+    const title = $('annTitle').value.trim();
+    const content = $('annContent').value.trim();
+    if (!content) { showToast('请输入公告内容', 'error'); return; }
+    try {
+        await api('/admin/announcements', 'POST', { title, content });
+        showToast('发布成功', 'success');
+        loadAdminAnnouncements();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function deleteAnnouncement(id) {
+    if (!confirm('确认删除？')) return;
+    try {
+        await api(`/admin/announcements/${id}`, 'DELETE');
+        showToast('删除成功', 'success');
+        loadAdminAnnouncements();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function loadAdminBanners() {
+    const content = $('adminContent');
+    content.innerHTML = `
+        <h3 style="margin-bottom:16px;font-size:18px">Banner管理</h3>
+        <div class="admin-form-group"><label>图片URL</label><input type="text" id="bannerImage" placeholder="图片链接"></div>
+        <div class="admin-form-group"><label>跳转链接</label><input type="text" id="bannerLink" placeholder="选填"></div>
+        <button class="btn-admin" onclick="createBanner()">添加Banner</button>
+    `;
+}
+
+async function createBanner() {
+    const image = $('bannerImage').value.trim();
+    if (!image) { showToast('请输入图片URL', 'error'); return; }
+    const link = $('bannerLink').value.trim();
+    try {
+        await api('/admin/banners', 'POST', { image, link });
+        showToast('添加成功', 'success');
+        loadAdminBanners();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function loadAdminCards() {
+    const content = $('adminContent');
+    content.innerHTML = `
+        <h3 style="margin-bottom:16px;font-size:18px">卡密管理</h3>
+        <div style="display:flex;gap:12px;margin-bottom:20px">
+            <div class="admin-form-group" style="flex:1"><label>生成数量</label><input type="number" id="cardCount" value="1" min="1"></div>
+            <div class="admin-form-group" style="flex:1"><label>面值</label><input type="number" step="0.01" id="cardValue" value="10"></div>
+            <button class="btn-admin" style="align-self:flex-end" onclick="generateCards()">生成</button>
+        </div>
+        <div class="admin-table" id="cardsTable"><div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div></div>
+    `;
+    try {
+        const data = await api('/admin/cards');
+        $('cardsTable').innerHTML = `
+            <table>
+                <thead><tr><th>ID</th><th>卡密号</th><th>面值</th><th>状态</th><th>使用者</th><th>时间</th></tr></thead>
+                <tbody>
+                    ${data.cards.map(c => `<tr>
+                        <td>${c.id}</td>
+                        <td style="font-family:monospace">${c.card_no}</td>
+                        <td>¥${parseFloat(c.card_value).toFixed(2)}</td>
+                        <td>${c.status === 'used' ? '已使用' : '未使用'}</td>
+                        <td>${c.used_username || '-'}</td>
+                        <td>${fmtDate(c.created_at)}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch {}
+}
+
+async function generateCards() {
+    const count = parseInt($('cardCount').value) || 1;
+    const value = parseFloat($('cardValue').value) || 10;
+    try {
+        const data = await api('/admin/cards', 'POST', { count, value });
+        showToast(`生成${data.cards.length}张卡密`, 'success');
+        loadAdminCards();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function loadAdminRecharge() {
+    const content = $('adminContent');
+    content.innerHTML = `
+        <h3 style="margin-bottom:16px;font-size:18px">充值管理</h3>
+        <p style="color:#666;margin-bottom:16px">用户充值记录和统计</p>
+        <div class="admin-table">
+            <table>
+                <thead><tr><th>充值套餐</th><th>充值金额</th><th>赠送金额</th><th>到账金额</th><th>状态</th></tr></thead>
+                <tbody>
+                    <tr><td>套餐1</td><td>10元</td><td>1元</td><td>11元</td><td>启用</td></tr>
+                    <tr><td>套餐2</td><td>30元</td><td>4元</td><td>34元</td><td>启用</td></tr>
+                    <tr><td>套餐3</td><td>50元</td><td>8元</td><td>58元</td><td>启用</td></tr>
+                    <tr><td>套餐4</td><td>100元</td><td>20元</td><td>120元</td><td>启用</td></tr>
+                    <tr><td>套餐5</td><td>500元</td><td>150元</td><td>650元</td><td>启用</td></tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// ===== 移动端菜单 =====
+function toggleMobileMenu() { $('navMenu').classList.toggle('show'); }
+
+// ===== 回到顶部 =====
+window.addEventListener('scroll', () => {
+    if (window.scrollY > 300) $('backToTop').classList.add('show');
+    else $('backToTop').classList.remove('show');
+});
+
+// ===== QQ登录回调处理 =====
+function handleQQCallback() {
+    const params = new URLSearchParams(window.location.hash.replace('#/qq-login?', ''));
+    const qqToken = params.get('token');
+    if (qqToken) {
+        token = qqToken;
+        localStorage.setItem('yy_token', token);
+        checkLogin().then(() => {
+            showToast('QQ登录成功', 'success');
+            navigate('home');
+        });
+    }
+}
+
+// ===== 初始化 =====
+async function init() {
+    handleQQCallback();
+    initBanner();
+    await checkLogin();
+    loadAnnouncements();
+    loadCategories();
+    loadProducts();
+    loadQQGroups();
+    navigate('home');
+}
+
+init();

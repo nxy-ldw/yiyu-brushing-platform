@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一屿刷课平台</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- 顶部导航 -->
+        <header class="header" id="header">
+            <div class="header-inner">
+                <div class="logo" onclick="navigate('home')">
+                    <svg class="logo-icon" viewBox="0 0 40 40" fill="none">
+                        <circle cx="20" cy="20" r="18" stroke="url(#logoGrad)" stroke-width="2.5"/>
+                        <path d="M12 20L18 26L28 14" stroke="url(#logoGrad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="logoGrad" x1="0" y1="0" x2="40" y2="40">
+                                <stop stop-color="#667eea"/>
+                                <stop offset="1" stop-color="#764ba2"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    <span>一屿刷课</span>
+                </div>
+                <nav class="nav-menu" id="navMenu">
+                    <a class="nav-item active" onclick="navigate('home')">首页</a>
+                    <a class="nav-item" onclick="navigate('group-buy')">拼团</a>
+                    <a class="nav-item" onclick="navigate('red-packet')">红包</a>
+                    <a class="nav-item" onclick="navigate('redeem')">卡密兑换</a>
+                    <a class="nav-item" onclick="navigate('progress')">进度查询</a>
+                    <a class="nav-item" onclick="navigate('orders')">我的订单</a>
+                </nav>
+                <div class="header-right">
+                    <div class="search-box" id="searchBox">
+                        <input type="text" id="searchInput" placeholder="搜索商品..." onkeypress="handleSearch(event)">
+                        <button class="search-btn" onclick="doSearch()">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="user-area" id="userArea">
+                        <button class="btn-login" onclick="showLoginModal()">登录</button>
+                        <button class="btn-register" onclick="showRegisterModal()">注册</button>
+                    </div>
+                    <div class="user-info" id="userInfo" style="display:none;">
+                        <div class="balance-badge" onclick="navigate('recharge')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+                            </svg>
+                            <span id="userBalance">0.00</span>
+                        </div>
+                        <div class="user-dropdown" id="userDropdown">
+                            <div class="user-avatar" id="userAvatar" onclick="toggleUserMenu()">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                                </svg>
+                            </div>
+                            <div class="dropdown-menu" id="dropdownMenu">
+                                <div class="dropdown-header">
+                                    <div class="dropdown-username" id="dropdownUsername">用户</div>
+                                </div>
+                                <a onclick="navigate('orders')">我的订单</a>
+                                <a onclick="navigate('recharge')">余额充值</a>
+                                <a onclick="navigate('messages')">消息中心</a>
+                                <a onclick="navigate('progress')">进度查询</a>
+                                <a onclick="navigate('redeem')">卡密兑换</a>
+                                <div class="dropdown-divider"></div>
+                                <a class="admin-link" id="adminLink" onclick="navigate('admin')" style="display:none;">后台管理</a>
+                                <a class="logout-link" onclick="logout()">退出登录</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="main-content" id="mainContent">
+            <!-- 首页 -->
+            <div class="page" id="page-home">
+                <!-- 轮播图 -->
+                <div class="banner-section">
+                    <div class="banner-carousel" id="bannerCarousel">
+                        <div class="banner-slide active" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                            <div class="banner-content">
+                                <h2>一屿刷课平台</h2>
+                                <p>专业 · 快速 · 安全 · 信赖</p>
+                                <span class="banner-tag">全场好物 限时优惠</span>
+                            </div>
+                        </div>
+                        <div class="banner-slide" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                            <div class="banner-content">
+                                <h2>充值大优惠</h2>
+                                <p>充100送20 · 充500送150</p>
+                                <span class="banner-tag">超值回馈</span>
+                            </div>
+                        </div>
+                        <div class="banner-slide" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                            <div class="banner-content">
+                                <h2>学习通全包</h2>
+                                <p>专业课选修课全能版</p>
+                                <span class="banner-tag">顶级服务</span>
+                            </div>
+                        </div>
+                        <div class="banner-slide" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                            <div class="banner-content">
+                                <h2>U校园系列</h2>
+                                <p>AI版 · 整本 · 单元 · 班测</p>
+                                <span class="banner-tag">全系列覆盖</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="banner-prev" onclick="prevBanner()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+                    <button class="banner-next" onclick="nextBanner()"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
+                    <div class="banner-dots" id="bannerDots"></div>
+                </div>
+
+                <!-- 公告栏 -->
+                <div class="announcement-bar" id="announcementBar">
+                    <div class="announcement-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
+                        </svg>
+                    </div>
+                    <div class="announcement-content" id="announcementContent"></div>
+                </div>
+
+                <!-- 分类导航 -->
+                <div class="category-nav" id="categoryNav"></div>
+
+                <!-- 商品推荐区 -->
+                <div class="products-section">
+                    <div class="section-header">
+                        <h2 class="section-title">为你推荐</h2>
+                        <div class="section-subtitle">为你甄选全场好物</div>
+                        <div class="sort-tabs">
+                            <button class="sort-tab active" onclick="sortProducts('default', this)">综合</button>
+                            <button class="sort-tab" onclick="sortProducts('sales', this)">销量</button>
+                            <button class="sort-tab" onclick="sortProducts('price_asc', this)">价格↑</button>
+                            <button class="sort-tab" onclick="sortProducts('price_desc', this)">价格↓</button>
+                        </div>
+                    </div>
+                    <div class="products-grid" id="productsGrid">
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <p>加载中...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- QQ群 -->
+                <div class="qq-section" id="qqSection"></div>
+            </div>
+
+            <!-- 拼团页 -->
+            <div class="page" id="page-group-buy" style="display:none;">
+                <div class="page-container">
+                    <h2 class="page-title">限时拼团</h2>
+                    <div class="group-buy-list" id="groupBuyList"></div>
+                </div>
+            </div>
+
+            <!-- 红包页 -->
+            <div class="page" id="page-red-packet" style="display:none;">
+                <div class="page-container">
+                    <h2 class="page-title">红包中心</h2>
+                    <div class="red-packet-grid" id="redPacketGrid"></div>
+                </div>
+            </div>
+
+            <!-- 卡密兑换页 -->
+            <div class="page" id="page-redeem" style="display:none;">
+                <div class="page-container">
+                    <h2 class="page-title">卡密兑换</h2>
+                    <div class="redeem-box">
+                        <p class="redeem-tip">输入卡密号即可兑换余额，兑换后余额将自动到账</p>
+                        <div class="redeem-form">
+                            <input type="text" id="cardNoInput" class="redeem-input" placeholder="请输入卡密号">
+                            <button class="btn-primary" onclick="redeemCard()">立即兑换</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 进度查询页 -->
+            <div class="page" id="page-progress" style="display:none;">
+                <div class="page-container">
+                    <h2 class="page-title">进度查询</h2>
+                    <div class="progress-search">
+                        <input type="text" id="progressSearch" placeholder="输入订单号查询..." onkeypress="if(event.key==='Enter')searchProgress()">
+                        <button class="btn-primary" onclick="searchProgress()">查询</button>
+                    </div>
+                    <div class="progress-list" id="progressList"></div>
+                </div>
+            </div>
+
+            <!-- 我的订单页 -->
+            <div class="page" id="page-orders" style="display:none;">
+                <div class="page-container">
+                    <h2 class="page-title">我的订单</h2>
+                    <div class="order-tabs">
+                        <button class="order-tab active" onclick="filterOrders('all', this)">全部</button>
+                        <button class="order-tab" onclick="filterOrders('paid', this)">已付款</button>
+                        <button class="order-tab" onclick="filterOrders('processing', this)">处理中</button>
+                        <button class="order-tab" onclick="filterOrders('completed', this)">已完成</button>
+                        <button class="order-tab" onclick="filterOrders('cancelled', this)">已取消</button>
+                    </div>
+                    <div class="orders-list" id="ordersList"></div>
+                </div>
+            </div>
+
+            <!-- 充值页 -->
+            <div class="page" id="page-recharge" style="display:none;">
+                <div class="page-container">
+                    <h2 class="page-title">余额充值</h2>
+                    <div class="balance-card">
+                        <div class="balance-label">当前余额</div>
+                        <div class="balance-amount" id="rechargeBalance">0.00 <span>元</span></div>
+                    </div>
+                    <div class="recharge-packages" id="rechargePackages"></div>
+                    <div class="recharge-tips">
+                        <h3>充值说明</h3>
+                        <ul>
+                            <li>在线充值10送1，30送4，50送8，100送20，500送150</li>
+                            <li>推荐买余额充值卡，下单使用余额支付，避免跳转问题</li>
+                            <li>请一定按页面显示金额付款，多付少付都不能到账</li>
+                            <li>若在线付款无法使用，可联系QQ客服购买充值卡</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 消息页 -->
+            <div class="page" id="page-messages" style="display:none;">
+                <div class="page-container">
+                    <h2 class="page-title">消息中心</h2>
+                    <div class="messages-list" id="messagesList"></div>
+                </div>
+            </div>
+
+            <!-- 后台管理页 -->
+            <div class="page" id="page-admin" style="display:none;">
+                <div class="admin-layout">
+                    <aside class="admin-sidebar">
+                        <div class="admin-sidebar-header">后台管理</div>
+                        <nav class="admin-nav">
+                            <a class="active" onclick="adminTab('dashboard', this)">数据看板</a>
+                            <a onclick="adminTab('users', this)">用户管理</a>
+                            <a onclick="adminTab('products', this)">商品管理</a>
+                            <a onclick="adminTab('orders', this)">订单管理</a>
+                            <a onclick="adminTab('announcements', this)">公告管理</a>
+                            <a onclick="adminTab('banners', this)">Banner管理</a>
+                            <a onclick="adminTab('cards', this)">卡密管理</a>
+                            <a onclick="adminTab('recharge', this)">充值管理</a>
+                        </nav>
+                    </aside>
+                    <div class="admin-content" id="adminContent"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 底部 -->
+        <footer class="footer">
+            <div class="footer-inner">
+                <div class="footer-col">
+                    <h4>一屿刷课平台</h4>
+                    <p>专业刷课服务平台，为您提供高效、安全、便捷的在线学习辅助服务</p>
+                </div>
+                <div class="footer-col">
+                    <h4>客服联系</h4>
+                    <p>QQ群：818682616</p>
+                    <p>QQ群：1098134604</p>
+                    <p>QQ群：790551986</p>
+                    <p>QQ群：1065974158</p>
+                </div>
+                <div class="footer-col">
+                    <h4>支付说明</h4>
+                    <p>请一定按页面显示金额付款</p>
+                    <p>多付少付都不能到账</p>
+                    <p>付错无法处理</p>
+                </div>
+                <div class="footer-col">
+                    <h4>关于我们</h4>
+                    <p>一屿文化出品</p>
+                    <p>电话：17712328993</p>
+                    <p>QQ：2947543703</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 一屿刷课平台 - 一屿文化 | 仅供学习交流使用</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 登录弹窗 -->
+    <div class="modal-overlay" id="loginModal" style="display:none;">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeModal('loginModal')">&times;</button>
+            <h2>用户登录</h2>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="loginUsername" placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="loginPassword" placeholder="请输入密码">
+            </div>
+            <button class="btn-primary btn-full" onclick="doLogin()">立即登录</button>
+            <div class="modal-divider"><span>其他登录方式</span></div>
+            <button class="btn-qq" onclick="qqLogin()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.5 2 6 4.5 6 8c0 1.5.5 3 1 4-1 1-2 2.5-2 4 0 .5.5 1 1 1s1.5-.5 2-1c.5.5 1.5 1 2 1-1 .5-1 1.5-1 2 0 .5.5 1 1 1h6c.5 0 1-.5 1-1 0-.5 0-1.5-1-2 .5 0 1.5-.5 2-1 .5.5 1.5 1 2 1s1-.5 1-1c0-1.5-1-3-2-4 .5-1 1-2.5 1-4 0-3.5-2.5-6-6-6z"/></svg>
+                QQ登录
+            </button>
+            <div class="modal-footer">
+                没有账号？<a onclick="closeModal('loginModal');showRegisterModal()">立即注册</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 注册弹窗 -->
+    <div class="modal-overlay" id="registerModal" style="display:none;">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeModal('registerModal')">&times;</button>
+            <h2>用户注册</h2>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="regUsername" placeholder="至少3个字符">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="regPassword" placeholder="至少6个字符">
+            </div>
+            <div class="form-group">
+                <label>手机号</label>
+                <input type="text" id="regPhone" placeholder="选填">
+            </div>
+            <div class="form-group">
+                <label>QQ号</label>
+                <input type="text" id="regQQ" placeholder="选填">
+            </div>
+            <button class="btn-primary btn-full" onclick="doRegister()">立即注册</button>
+            <div class="modal-footer">
+                已有账号？<a onclick="closeModal('registerModal');showLoginModal()">立即登录</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 下单弹窗 -->
+    <div class="modal-overlay" id="orderModal" style="display:none;">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeModal('orderModal')">&times;</button>
+            <h2>确认下单</h2>
+            <div id="orderProductInfo"></div>
+            <div class="form-group">
+                <label>刷课账号 *</label>
+                <input type="text" id="orderAccount" placeholder="请输入需要刷课的账号">
+            </div>
+            <div class="form-group">
+                <label>密码提示</label>
+                <input type="text" id="orderPassword" placeholder="密码提示（非必填）">
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <textarea id="orderRemark" placeholder="特殊要求请备注"></textarea>
+            </div>
+            <div class="form-group">
+                <label>数量</label>
+                <div class="quantity-control">
+                    <button onclick="changeQty(-1)">-</button>
+                    <input type="number" id="orderQty" value="1" min="1">
+                    <button onclick="changeQty(1)">+</button>
+                </div>
+            </div>
+            <div class="order-summary">
+                <span>合计：</span>
+                <span class="order-total" id="orderTotal">0.00元</span>
+            </div>
+            <button class="btn-primary btn-full" onclick="createOrder()">确认下单</button>
+        </div>
+    </div>
+
+    <!-- 充值确认弹窗 -->
+    <div class="modal-overlay" id="rechargeModal" style="display:none;">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeModal('rechargeModal')">&times;</button>
+            <h2>确认充值</h2>
+            <div id="rechargeInfo"></div>
+            <div class="recharge-pay-tips">
+                <p>请在新页面完成支付</p>
+                <p>支付完成后请点击下方按钮确认</p>
+            </div>
+            <button class="btn-primary btn-full" onclick="confirmRecharge()">我已支付，确认到账</button>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- 回到顶部 -->
+    <div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="18 15 12 9 6 15"/>
+        </svg>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
