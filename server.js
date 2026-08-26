@@ -2,7 +2,6 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
-const compression = require('compression');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
@@ -21,8 +20,8 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-// Gzip压缩
-app.use(compression());
+// Gzip压缩（暂时移除，待确认部署成功后再加）
+// app.use(compression());
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
