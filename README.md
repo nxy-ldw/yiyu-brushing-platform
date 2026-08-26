@@ -1,4 +1,4 @@
-# 一屿刷课平台
+# 一屿刷课平台        https://yiyu-brushing-platform-production.up.railway.app/
 
 现代化刷课服务平台，基于 Node.js + Express + PostgreSQL 构建。
 
