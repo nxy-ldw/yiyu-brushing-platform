@@ -2450,7 +2450,12 @@ async function testWechatNotify() {
 }
 
 async function testEmailNotify() {
-    showToast('请先保存设置后再测试', 'info');
+    try {
+        await api('/admin/test-email', 'POST', {});
+        showToast('测试邮件已发送，请查收邮箱', 'success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
 }
 
 // ===== 数据备份 =====

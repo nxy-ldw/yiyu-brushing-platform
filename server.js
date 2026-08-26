@@ -1231,6 +1231,36 @@ app.put('/api/admin/notify-settings', authMiddleware, adminMiddleware, async (re
   }
 });
 
+// ===== 测试邮件推送 =====
+app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const settings = store.findOne('site_settings', { id: 1 });
+    if (!settings || !settings.email_enabled || !settings.smtp_host || !settings.notify_email) {
+      return res.status(400).json({ error: '请先保存并开启邮件通知配置' });
+    }
+
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: settings.smtp_host,
+      port: parseInt(settings.smtp_port) || 465,
+      secure: parseInt(settings.smtp_port) === 465,
+      auth: { user: settings.smtp_user, pass: settings.smtp_pass }
+    });
+
+    await transporter.sendMail({
+      from: `"一屿刷课平台" <${settings.smtp_user}>`,
+      to: settings.notify_email,
+      subject: '【测试】邮件推送正常',
+      text: '恭喜！邮件通知配置成功！\n\n来自：一屿刷课平台\n发送时间：' + new Date().toLocaleString('zh-CN')
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('测试邮件失败:', err);
+    res.status(500).json({ error: '发送失败：' + err.message });
+  }
+});
+
 // 发送通知（Server酱 + 邮件）
 async function sendNotification(title, content) {
   try {
