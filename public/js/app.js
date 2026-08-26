@@ -1849,14 +1849,12 @@ async function loadBanners() {
         const carousel = $('bannerCarousel');
         carousel.innerHTML = banners.map((b, i) => {
             const gradient = gradients[b.color] || gradientList[i % gradientList.length];
-            let bgStyle = `background: ${gradient};`;
-            if (b.image) {
-                bgStyle = `background-image: url('${b.image}'), ${gradient}; background-size: cover; background-position: center; background-repeat: no-repeat;`;
-            }
             const title = b.title || '一屿刷课平台';
             const subtitle = b.subtitle || '';
+            // 双层结构：外层渐变背景始终存在，内层图片覆盖在上
             return `
-                <div class="banner-slide ${i === 0 ? 'active' : ''}" style="${bgStyle}" ${b.link ? `onclick="window.open('${b.link}')"` : ''}>
+                <div class="banner-slide ${i === 0 ? 'active' : ''}" style="background: ${gradient};" ${b.link ? `onclick="window.open('${b.link}')"` : ''}>
+                    ${b.image ? `<img src="${b.image}" class="banner-bg-img" onerror="this.style.display='none'">` : ''}
                     <div class="banner-content">
                         <h2>${title}</h2>
                         ${subtitle ? `<p>${subtitle}</p>` : ''}

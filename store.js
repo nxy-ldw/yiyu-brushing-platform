@@ -301,11 +301,31 @@ function initData() {
     });
   }
 
+  // Banner数据迁移与初始化
   if (data.banners.length === 0) {
     insert('banners', { title: '一屿刷课平台', subtitle: '专业 · 快速 · 安全 · 信赖', image: '', link: '', sort_order: 0, status: 1, color: 'purple' });
     insert('banners', { title: '充值大优惠', subtitle: '充100送20 · 充500送150', image: '', link: '', sort_order: 1, status: 1, color: 'pink' });
     insert('banners', { title: '学习通全包', subtitle: '专业课选修课全能版', image: '', link: '', sort_order: 2, status: 1, color: 'blue' });
     insert('banners', { title: '全系列覆盖', subtitle: 'U校园 · 智慧树 · 雨课堂', image: '', link: '', sort_order: 3, status: 1, color: 'green' });
+  } else {
+    // 数据迁移：旧版Banner只有image，补充title/subtitle/color字段，清除无效图片URL
+    const gradients = ['purple', 'pink', 'blue', 'green'];
+    const defaultTitles = ['一屿刷课平台', '充值大优惠', '学习通全包', '全系列覆盖'];
+    const defaultSubtitles = ['专业 · 快速 · 安全 · 信赖', '充100送20 · 充500送150', '专业课选修课全能版', 'U校园 · 智慧树 · 雨课堂'];
+    data.banners.forEach((b, i) => {
+      let needUpdate = false;
+      if (!b.title) { b.title = defaultTitles[i % defaultTitles.length]; needUpdate = true; }
+      if (b.subtitle === undefined) { b.subtitle = defaultSubtitles[i % defaultSubtitles.length]; needUpdate = true; }
+      if (!b.color) { b.color = gradients[i % gradients.length]; needUpdate = true; }
+      // 清除AI生成的无效图片URL
+      if (b.image && (b.image.includes('trae-api-cn.mchost.guru') || b.image.includes('text_to_image'))) {
+        b.image = '';
+        needUpdate = true;
+      }
+      if (needUpdate) {
+        update('banners', { id: b.id }, b);
+      }
+    });
   }
 
   scheduleSave();
