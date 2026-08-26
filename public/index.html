@@ -279,20 +279,20 @@
                 </div>
             </div>
 
-            <!-- 支付成功页 -->
+            <!-- 支付成功页（待审核） -->
             <div class="page" id="page-pay-success" style="display:none;">
                 <div class="page-container pay-success-page">
-                    <div class="success-icon">
+                    <div class="success-icon" style="background:linear-gradient(135deg,#ffa751,#ffe259)">
                         <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"/>
-                            <path d="M8 12l3 3 5-6"/>
+                            <path d="M12 6v6l4 2"/>
                         </svg>
                     </div>
-                    <h2 class="success-title" id="paySuccessTitle">支付成功</h2>
-                    <p class="success-content" id="paySuccessContent">您的支付已提交，系统将在1-5分钟内自动到账。如长时间未到账请联系客服。</p>
+                    <h2 class="success-title" id="paySuccessTitle">支付已提交，等待审核</h2>
+                    <p class="success-content" id="paySuccessContent">您的支付凭证已提交，请等待管理员审核。审核通过后余额将自动到账，通常1-30分钟内完成。</p>
                     <div class="success-actions">
                         <button class="btn-secondary" onclick="navigate('home')">返回首页</button>
-                        <button class="btn-primary" onclick="checkRechargeResult()">查看余额</button>
+                        <button class="btn-primary" onclick="navigate('recharge')">查看充值记录</button>
                     </div>
                 </div>
             </div>
@@ -315,6 +315,7 @@
                             <a onclick="adminTab('users', this)">用户管理</a>
                             <a onclick="adminTab('products', this)">商品管理</a>
                             <a onclick="adminTab('orders', this)">订单管理</a>
+                            <a onclick="adminTab('recharges', this)">充值审核</a>
                             <a onclick="adminTab('messages', this)">消息群发</a>
                             <a onclick="adminTab('announcements', this)">公告管理</a>
                             <a onclick="adminTab('banners', this)">Banner管理</a>
@@ -424,8 +425,16 @@
                 <input type="text" id="orderAccount" placeholder="请输入需要刷课的账号">
             </div>
             <div class="form-group">
-                <label>密码提示</label>
-                <input type="text" id="orderPassword" placeholder="密码提示（非必填）">
+                <label>登录密码 *</label>
+                <input type="text" id="orderPassword" placeholder="请输入账号登录密码">
+            </div>
+            <div class="form-group">
+                <label>学校名称 *</label>
+                <input type="text" id="orderSchool" placeholder="请输入学校名称">
+            </div>
+            <div class="form-group">
+                <label>课程名称 *</label>
+                <input type="text" id="orderCourse" placeholder="请输入课程名称">
             </div>
             <div class="form-group">
                 <label>备注</label>

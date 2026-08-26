@@ -400,6 +400,8 @@ async function showOrderModal(productId) {
         $('orderTotal').textContent = fmtPrice(displayPrice) + '元';
         $('orderAccount').value = '';
         $('orderPassword').value = '';
+        $('orderSchool').value = '';
+        $('orderCourse').value = '';
         $('orderRemark').value = '';
         $('orderModal').style.display = 'flex';
     } catch (err) {
@@ -429,11 +431,16 @@ async function createOrder() {
     if (!currentUser) { showToast('请先登录', 'error'); return; }
     const account = $('orderAccount').value.trim();
     const passwordHint = $('orderPassword').value.trim();
+    const school = $('orderSchool').value.trim();
+    const course_name = $('orderCourse').value.trim();
     const remark = $('orderRemark').value.trim();
     const quantity = parseInt($('orderQty').value) || 1;
     if (!account) { showToast('请填写刷课账号', 'error'); return; }
+    if (!passwordHint) { showToast('请填写登录密码', 'error'); return; }
+    if (!school) { showToast('请填写学校名称', 'error'); return; }
+    if (!course_name) { showToast('请填写课程名称', 'error'); return; }
     try {
-        const data = await api('/orders', 'POST', { productId: currentProductId, quantity, account, passwordHint, remark });
+        const data = await api('/orders', 'POST', { productId: currentProductId, quantity, account, passwordHint, school, course_name, remark });
         closeModal('orderModal');
         showToast('下单成功！', 'success');
         await refreshUser();
@@ -611,21 +618,14 @@ function updatePayQr(settings) {
 async function confirmPaySuccess() {
     if (!currentRechargeId) { showToast('充值订单不存在', 'error'); return; }
     try {
-        const data = await api('/recharge/confirm', 'POST', { rechargeId: currentRechargeId });
+        const data = await api('/recharge/confirm', 'POST', { 
+            rechargeId: currentRechargeId,
+            payMethod: currentPayMethod || 'wechat'
+        });
         showToast(data.message, 'success');
         currentRechargeId = null;
         selectedRechargeAmount = null;
         await refreshUser();
-        // 跳转到支付成功页
-        try {
-            const payData = await api('/pay-settings');
-            const settings = payData.settings || {};
-            if (settings.success_title) $('paySuccessTitle').textContent = settings.success_title;
-            if (settings.success_content) $('paySuccessContent').textContent = settings.success_content;
-            if (settings.success_redirect_url) {
-                setTimeout(() => { window.location.href = settings.success_redirect_url; }, 2000);
-            }
-        } catch {}
         navigate('pay-success');
     } catch (err) {
         showToast(err.message, 'error');
@@ -915,6 +915,7 @@ function adminTab(tab, el) {
     else if (tab === 'users') loadAdminUsers();
     else if (tab === 'products') loadAdminProducts();
     else if (tab === 'orders') loadAdminOrders();
+    else if (tab === 'recharges') loadAdminRecharges();
     else if (tab === 'messages') loadAdminMessages();
     else if (tab === 'announcements') loadAdminAnnouncements();
     else if (tab === 'banners') loadAdminBanners();
@@ -1414,6 +1415,96 @@ async function updateOrderStatus(id, status) {
         await api(`/admin/orders/${id}/status`, 'POST', { status });
         showToast('更新成功', 'success');
         loadAdminOrders();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// ===== 充值审核 =====
+let rechargeFilter = 'all';
+async function loadAdminRecharges() {
+    const content = $('adminContent');
+    content.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div>';
+    try {
+        const data = await api('/admin/recharges?status=' + rechargeFilter, false); // 不缓存
+        const statusMap = {
+            'pending': { text: '待支付', color: '#999' },
+            'waiting_confirm': { text: '待审核', color: '#f59e0b' },
+            'success': { text: '已到账', color: '#10b981' },
+            'rejected': { text: '已拒绝', color: '#ef4444' }
+        };
+        const methodMap = { 'wechat': '微信', 'alipay': '支付宝' };
+        content.innerHTML = `
+            <h3 style="margin-bottom:16px;font-size:18px">充值审核</h3>
+            <div class="admin-toolbar">
+                <div style="display:flex;gap:8px">
+                    <button class="btn-admin ${rechargeFilter==='all'?'primary':''}" onclick="filterRecharges('all')">全部</button>
+                    <button class="btn-admin ${rechargeFilter==='waiting_confirm'?'primary':''}" onclick="filterRecharges('waiting_confirm')">待审核</button>
+                    <button class="btn-admin ${rechargeFilter==='success'?'primary':''}" onclick="filterRecharges('success')">已通过</button>
+                    <button class="btn-admin ${rechargeFilter==='rejected'?'primary':''}" onclick="filterRecharges('rejected')">已拒绝</button>
+                </div>
+            </div>
+            <div class="admin-table">
+                <table>
+                    <thead><tr><th>ID</th><th>用户</th><th>手机号</th><th>金额</th><th>赠送</th><th>支付方式</th><th>状态</th><th>提交时间</th><th>操作</th></tr></thead>
+                    <tbody>
+                        ${data.recharges.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:40px;color:#999">暂无数据</td></tr>' : 
+                        data.recharges.map(r => {
+                            const st = statusMap[r.status] || { text: r.status, color: '#999' };
+                            return `<tr>
+                                <td>#${r.id}</td>
+                                <td>${r.username || '-'}</td>
+                                <td>${r.phone || '-'}</td>
+                                <td style="font-weight:600;color:#f5576c">¥${parseFloat(r.amount).toFixed(2)}</td>
+                                <td>¥${parseFloat(r.bonus || 0).toFixed(2)}</td>
+                                <td>${methodMap[r.method] || r.method || '-'}</td>
+                                <td><span style="color:${st.color};font-weight:500">${st.text}</span></td>
+                                <td>${fmtDate(r.created_at)}</td>
+                                <td>
+                                    ${r.status === 'waiting_confirm' ? `
+                                        <button class="btn-admin success" style="padding:4px 10px;font-size:12px" onclick="approveRecharge(${r.id})">通过</button>
+                                        <button class="btn-admin danger" style="padding:4px 10px;font-size:12px" onclick="rejectRecharge(${r.id})">拒绝</button>
+                                    ` : r.status === 'success' ? 
+                                        `<span style="color:#10b981;font-size:12px">已到账</span>` :
+                                    r.status === 'rejected' ?
+                                        `<span style="color:#ef4444;font-size:12px">已拒绝${r.reject_reason ? '：' + r.reject_reason : ''}</span>` :
+                                        `<span style="color:#999;font-size:12px">待支付</span>`
+                                    }
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
+    }
+}
+
+function filterRecharges(status) {
+    rechargeFilter = status;
+    loadAdminRecharges();
+}
+
+async function approveRecharge(id) {
+    if (!confirm('确认通过此充值申请？通过后余额将自动到账。')) return;
+    try {
+        await api(`/admin/recharges/${id}/approve`, 'POST', {});
+        showToast('审核通过，已到账', 'success');
+        loadAdminRecharges();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function rejectRecharge(id) {
+    const reason = prompt('请输入拒绝原因（选填）：');
+    if (reason === null) return;
+    try {
+        await api(`/admin/recharges/${id}/reject`, 'POST', { reason });
+        showToast('已拒绝', 'success');
+        loadAdminRecharges();
     } catch (err) {
         showToast(err.message, 'error');
     }

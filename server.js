@@ -241,9 +241,12 @@ app.get('/api/categories', async (req, res) => {
 
 app.post('/api/orders', authMiddleware, async (req, res) => {
   try {
-    const { productId, quantity, account, passwordHint, remark } = req.body;
+    const { productId, quantity, account, passwordHint, school, course_name, remark } = req.body;
     if (!productId) return res.status(400).json({ error: '请选择商品' });
     if (!account) return res.status(400).json({ error: '请填写刷课账号' });
+    if (!passwordHint) return res.status(400).json({ error: '请填写登录密码' });
+    if (!school) return res.status(400).json({ error: '请填写学校名称' });
+    if (!course_name) return res.status(400).json({ error: '请填写课程名称' });
 
     const qty = quantity || 1;
     const product = store.findOne('products', { id: parseInt(productId), status: 1 });
@@ -264,7 +267,8 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     const order = store.insert('orders', {
       order_no: orderNo, user_id: req.user.id, product_id: parseInt(productId),
       product_title: product.title, price: unitPrice, quantity: qty, total,
-      account, password_hint: passwordHint || '', remark: remark || '',
+      account, password_hint: passwordHint || '', school: school || '', course_name: course_name || '',
+      remark: remark || '',
       status: 'paid', progress: 'processing', agent_level: agentLevel
     });
 
@@ -333,18 +337,110 @@ app.post('/api/recharge', authMiddleware, async (req, res) => {
 
 app.post('/api/recharge/confirm', authMiddleware, async (req, res) => {
   try {
-    const { rechargeId } = req.body;
+    const { rechargeId, payMethod } = req.body;
     const recharge = store.findOne('recharges', { id: parseInt(rechargeId), user_id: req.user.id, status: 'pending' });
     if (!recharge) return res.status(400).json({ error: '充值订单不存在或已处理' });
-    const totalAmount = parseFloat(recharge.amount) + parseFloat(recharge.bonus);
 
-    store.update('recharges', { id: recharge.id }, { status: 'success' });
-    store.update('users', { id: req.user.id }, { balance: { $inc: totalAmount } });
-    store.insert('messages', { user_id: req.user.id, title: '充值成功', content: `充值${recharge.amount}元，赠送${recharge.bonus}元，到账${totalAmount}元`, type: 'recharge', is_read: false });
+    // 改为待审核状态，等待管理员确认
+    store.update('recharges', { id: recharge.id }, { 
+      status: 'waiting_confirm',
+      method: payMethod || recharge.method || 'wechat',
+      confirm_at: new Date().toISOString()
+    });
 
-    res.json({ success: true, message: `充值成功！到账${totalAmount}元` });
+    res.json({ success: true, message: '已提交支付凭证，请等待管理员审核' });
   } catch (err) {
-    res.status(500).json({ error: '确认充值失败' });
+    res.status(500).json({ error: '提交失败' });
+  }
+});
+
+// 管理员：充值审核列表
+app.get('/api/admin/recharges', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { status, keyword } = req.query;
+    let conditions = {};
+    if (status && status !== 'all') conditions.status = status;
+    const result = store.findMany('recharges', conditions, { sort: { created_at: 'desc' }, limit: 200 });
+    // 关联用户信息
+    const rows = result.rows.map(r => {
+      const user = store.findOne('users', { id: r.user_id });
+      return { ...r, username: user?.username || '', phone: user?.phone || '' };
+    });
+    if (keyword) {
+      const kw = keyword.toLowerCase();
+      const filtered = rows.filter(r => 
+        r.username?.toLowerCase().includes(kw) || 
+        r.phone?.includes(kw) ||
+        r.id?.toString().includes(kw)
+      );
+      res.json({ recharges: filtered });
+    } else {
+      res.json({ recharges: rows });
+    }
+  } catch (err) {
+    console.error('Get recharges error:', err);
+    res.status(500).json({ error: '获取充值列表失败' });
+  }
+});
+
+// 管理员：审核通过充值
+app.post('/api/admin/recharges/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const recharge = store.findOne('recharges', { id: parseInt(req.params.id) });
+    if (!recharge) return res.status(404).json({ error: '充值订单不存在' });
+    if (recharge.status === 'success') return res.status(400).json({ error: '订单已通过' });
+    
+    const totalAmount = parseFloat(recharge.amount) + parseFloat(recharge.bonus || 0);
+    
+    store.update('recharges', { id: recharge.id }, { 
+      status: 'success', 
+      approved_by: req.user.id,
+      approved_at: new Date().toISOString()
+    });
+    store.update('users', { id: recharge.user_id }, { balance: { $inc: totalAmount } });
+    store.insert('messages', { 
+      user_id: recharge.user_id, 
+      title: '充值成功', 
+      content: `充值${recharge.amount}元，赠送${recharge.bonus || 0}元，到账${totalAmount}元`, 
+      type: 'recharge', 
+      is_read: false,
+      created_at: new Date().toISOString()
+    });
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Approve recharge error:', err);
+    res.status(500).json({ error: '审核失败' });
+  }
+});
+
+// 管理员：拒绝充值
+app.post('/api/admin/recharges/:id/reject', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const recharge = store.findOne('recharges', { id: parseInt(req.params.id) });
+    if (!recharge) return res.status(404).json({ error: '充值订单不存在' });
+    if (recharge.status === 'success') return res.status(400).json({ error: '已通过的订单不能拒绝' });
+    
+    store.update('recharges', { id: recharge.id }, { 
+      status: 'rejected', 
+      reject_reason: reason || '',
+      rejected_by: req.user.id,
+      rejected_at: new Date().toISOString()
+    });
+    store.insert('messages', { 
+      user_id: recharge.user_id, 
+      title: '充值被驳回', 
+      content: `您的${recharge.amount}元充值申请被拒绝。${reason ? '原因：' + reason : ''}`, 
+      type: 'system', 
+      is_read: false,
+      created_at: new Date().toISOString()
+    });
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Reject recharge error:', err);
+    res.status(500).json({ error: '操作失败' });
   }
 });
 
