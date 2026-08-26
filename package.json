@@ -8,13 +8,11 @@
     "dev": "node server.js"
   },
   "dependencies": {
-    "@railway/cli": "^5.44.0",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.2",
-    "pg": "^8.11.3"
+    "jsonwebtoken": "^9.0.2"
   },
   "engines": {
     "node": ">=18.x"

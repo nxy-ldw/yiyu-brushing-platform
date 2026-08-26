@@ -6,8 +6,13 @@ dist/
 build/
 .railway/
 data/
+railway-config/
 download-railway.js
 railway-api-deploy.js
 railway-deploy.js
 railway-run.bat
 set-env-vars.ps1
+add-postgres.js
+check-railway.js
+setup-database.js
+redeploy.js
