@@ -1,18 +1,67 @@
-const { Pool } = require('pg');
+const DATABASE_URL = process.env.DATABASE_URL;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://localhost:5432/yiyu',
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-});
+let pool;
 
-pool.on('connect', (client) => {
-  client.on('error', () => {});
-});
+if (DATABASE_URL) {
+  const { Pool } = require('pg');
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: DATABASE_URL.includes('railway') ? { rejectUnauthorized: false } : false,
+  });
+  pool.on('connect', (client) => {
+    client.on('error', () => {});
+  });
+} else {
+  const Database = require('better-sqlite3');
+  const dbPath = process.env.DB_PATH || './data/yiyu.db';
+  const fs = require('fs');
+  const dir = require('path').dirname(dbPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const sqliteDb = new Database(dbPath);
+  sqliteDb.pragma('journal_mode = WAL');
+
+  function convertSql(text) {
+    return text
+      .replace(/SERIAL PRIMARY KEY/g, 'INTEGER PRIMARY KEY AUTOINCREMENT')
+      .replace(/BOOLEAN/g, 'INTEGER')
+      .replace(/DECIMAL\(\d+,\d+\)/g, 'REAL')
+      .replace(/\$(\d+)/g, '?');
+  }
+
+  class SqliteClient {
+    query(text, params) {
+      const sql = convertSql(text);
+      const stmt = sqliteDb.prepare(sql);
+      if (sql.trim().toUpperCase().startsWith('SELECT') || sql.trim().toUpperCase().startsWith('PRAGMA') || sql.trim().toUpperCase().startsWith('WITH')) {
+        const rows = stmt.all(...(params || []));
+        return { rows };
+      }
+      const result = stmt.run(...(params || []));
+      return { rows: [], rowCount: result.changes };
+    }
+    release() {}
+    on() { return this; }
+  }
+
+  class SqlitePool {
+    query(text, params) {
+      return Promise.resolve(new SqliteClient().query(text, params));
+    }
+    connect() {
+      return Promise.resolve(new SqliteClient());
+    }
+    on() { return this; }
+  }
+
+  pool = new SqlitePool();
+}
 
 async function initDB() {
   const client = await pool.connect();
   try {
-    await client.query(`
+    const exec = (sql) => client.query(sql);
+
+    await exec(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(50) UNIQUE NOT NULL,
@@ -27,7 +76,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
@@ -46,7 +95,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS categories (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
@@ -56,7 +105,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
         order_no VARCHAR(50) UNIQUE NOT NULL,
@@ -76,7 +125,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS recharges (
         id SERIAL PRIMARY KEY,
         user_id INT NOT NULL,
@@ -88,7 +137,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS banners (
         id SERIAL PRIMARY KEY,
         image VARCHAR(255) NOT NULL,
@@ -98,7 +147,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS announcements (
         id SERIAL PRIMARY KEY,
         title VARCHAR(255),
@@ -109,7 +158,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS card_keys (
         id SERIAL PRIMARY KEY,
         card_no VARCHAR(100) UNIQUE NOT NULL,
@@ -121,7 +170,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS group_buys (
         id SERIAL PRIMARY KEY,
         product_id INT NOT NULL,
@@ -136,7 +185,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS red_packets (
         id SERIAL PRIMARY KEY,
         title VARCHAR(255),
@@ -151,7 +200,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS user_red_packets (
         id SERIAL PRIMARY KEY,
         user_id INT NOT NULL,
@@ -161,7 +210,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS messages (
         id SERIAL PRIMARY KEY,
         user_id INT NOT NULL,
@@ -173,7 +222,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS qq_groups (
         id SERIAL PRIMARY KEY,
         group_no VARCHAR(50) NOT NULL,
@@ -183,7 +232,7 @@ async function initDB() {
       );
     `);
 
-    await client.query(`
+    await exec(`
       CREATE TABLE IF NOT EXISTS recharge_packages (
         id SERIAL PRIMARY KEY,
         amount DECIMAL(10,2) NOT NULL,
