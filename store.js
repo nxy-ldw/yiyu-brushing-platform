@@ -20,7 +20,7 @@ function load() {
   } catch {
     data = {};
   }
-  const tables = ['users','products','categories','orders','recharges','banners','announcements','card_keys','group_buys','red_packets','user_red_packets','messages','qq_groups','recharge_packages','pay_settings','site_settings','balance_logs','withdrawals','admin_read_logs'];
+  const tables = ['users','products','categories','orders','recharges','banners','announcements','card_keys','group_buys','red_packets','user_red_packets','messages','qq_groups','recharge_packages','pay_settings','site_settings','balance_logs','withdrawals','admin_read_logs','recharge_backups','withdrawal_backups'];
   for (const t of tables) {
     if (!data[t]) data[t] = [];
     if (!nextIds[t]) nextIds[t] = (data[t].length > 0 ? Math.max(...data[t].map(r => r.id || 0)) : 0) + 1;

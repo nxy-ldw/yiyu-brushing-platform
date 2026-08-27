@@ -527,7 +527,7 @@ app.post('/api/admin/recharges/clear-history', authMiddleware, adminMiddleware, 
         approved_at: r.approved_at || '',
         backup_at: new Date().toISOString()
       });
-      store.delete('recharges', { id: r.id });
+      store.remove('recharges', { id: r.id });
     }
 
     res.json({ success: true, cleared: toDelete.length });
@@ -566,7 +566,7 @@ app.post('/api/admin/withdrawals/clear-history', authMiddleware, adminMiddleware
         updated_at: w.updated_at || w.created_at,
         backup_at: new Date().toISOString()
       });
-      store.delete('withdrawals', { id: w.id });
+      store.remove('withdrawals', { id: w.id });
     }
 
     res.json({ success: true, cleared: toDelete.length });
@@ -609,7 +609,7 @@ app.post('/api/admin/recharges/restore', authMiddleware, adminMiddleware, async 
         updated_at: b.updated_at,
         approved_at: b.approved_at
       });
-      store.delete('recharge_backups', { id: b.id });
+      store.remove('recharge_backups', { id: b.id });
       restored++;
     }
 
@@ -655,7 +655,7 @@ app.post('/api/admin/withdrawals/restore', authMiddleware, adminMiddleware, asyn
         created_at: b.created_at,
         updated_at: b.updated_at
       });
-      store.delete('withdrawal_backups', { id: b.id });
+      store.remove('withdrawal_backups', { id: b.id });
       restored++;
     }
 
