@@ -1677,14 +1677,15 @@ app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, r
 async function sendNotification(title, content) {
   try {
     const settings = store.findOne('site_settings', { id: 1 });
-    if (!settings || !settings.notify_enabled) {
-      console.log('[通知] 通知未开启，跳过');
+    if (!settings) {
+      console.log('[通知] 无站点设置，跳过');
       return;
     }
 
     console.log(`[通知] 开始发送: ${title}`);
+    console.log(`[通知] 配置: notify_enabled=${settings.notify_enabled}, email_enabled=${settings.email_enabled}, provider=${settings.email_provider}, sct_key=${settings.sct_key ? '有' : '无'}, resend_key=${settings.resend_api_key ? '有' : '无'}, notify_email=${settings.notify_email}`);
 
-    // Server酱微信推送
+    // Server酱微信推送（不受总开关限制，只要有sct_key就发）
     if (settings.sct_key) {
       try {
         const url = `https://sctapi.ftqq.com/${settings.sct_key}.send`;
@@ -1698,10 +1699,11 @@ async function sendNotification(title, content) {
       }
     }
 
-    // 邮件通知
+    // 邮件通知（只要有email_enabled和notify_email就发）
     if (settings.email_enabled && settings.notify_email) {
       try {
         const provider = settings.email_provider || 'smtp';
+        console.log(`[通知] 邮件provider=${provider}`);
         if (provider === 'resend' && settings.resend_api_key) {
           // Resend API 模式
           const fromAddr = settings.resend_from || 'onboarding@resend.dev';
@@ -1744,6 +1746,8 @@ async function sendNotification(title, content) {
             text: content
           });
           console.log('[通知] SMTP邮件发送成功');
+        } else {
+          console.log('[通知] 邮件配置不完整: provider非resend且无smtp配置');
         }
       } catch (e) {
         console.error('[通知] 邮件推送失败:', e.message);
