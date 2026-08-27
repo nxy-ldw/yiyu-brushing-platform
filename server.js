@@ -498,6 +498,34 @@ app.post('/api/admin/recharges/:id/reject', authMiddleware, adminMiddleware, asy
 
 // ===================== 充值/提现 历史清空与恢复 =====================
 
+// 自动取消超过30分钟未支付的充值订单
+setInterval(() => {
+  try {
+    const recharges = store.findMany('recharges', {}, {}).rows;
+    const now = new Date();
+    let cancelled = 0;
+    for (const r of recharges) {
+      if (r.status === 'pending') {
+        const created = new Date(r.created_at);
+        const diffMin = (now - created) / 60000;
+        if (diffMin > 30) {
+          store.update('recharges', { id: r.id }, {
+            status: 'cancelled',
+            cancel_reason: '30分钟未支付自动取消',
+            cancelled_at: new Date().toISOString()
+          });
+          cancelled++;
+        }
+      }
+    }
+    if (cancelled > 0) {
+      console.log(`[自动取消] ${cancelled} 笔充值订单超时未支付，已自动取消`);
+    }
+  } catch (err) {
+    console.error('[自动取消] 执行失败:', err.message);
+  }
+}, 60000); // 每分钟检查一次
+
 // 充值审核：清空已处理的记录（保留 pending 和 waiting_confirm）
 app.post('/api/admin/recharges/clear-history', authMiddleware, adminMiddleware, async (req, res) => {
   try {

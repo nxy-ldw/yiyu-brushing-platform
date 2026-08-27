@@ -738,6 +738,16 @@ function updatePayQr(settings) {
     }
 }
 
+async function cancelPayAndBack() {
+    if (currentRechargeId) {
+        try {
+            await api('/recharge/cancel', 'POST', { rechargeId: currentRechargeId });
+            currentRechargeId = null;
+        } catch {}
+    }
+    navigate('recharge');
+}
+
 async function confirmPaySuccess() {
     if (!currentRechargeId) { showToast('充值订单不存在', 'error'); return; }
     const txnId = $('payTxnId').value.trim();
@@ -2015,7 +2025,8 @@ async function loadAdminRecharges() {
             'pending': { text: '待支付', color: '#999' },
             'waiting_confirm': { text: '待审核', color: '#f59e0b' },
             'success': { text: '已到账', color: '#10b981' },
-            'rejected': { text: '已拒绝', color: '#ef4444' }
+            'rejected': { text: '已拒绝', color: '#ef4444' },
+            'cancelled': { text: '已取消', color: '#6b7280' }
         };
         const methodMap = { 'wechat': '微信', 'alipay': '支付宝' };
         content.innerHTML = `
@@ -2026,6 +2037,7 @@ async function loadAdminRecharges() {
                     <button class="btn-admin ${rechargeFilter==='waiting_confirm'?'primary':''}" onclick="filterRecharges('waiting_confirm')">待审核</button>
                     <button class="btn-admin ${rechargeFilter==='success'?'primary':''}" onclick="filterRecharges('success')">已通过</button>
                     <button class="btn-admin ${rechargeFilter==='rejected'?'primary':''}" onclick="filterRecharges('rejected')">已拒绝</button>
+                    <button class="btn-admin ${rechargeFilter==='cancelled'?'primary':''}" onclick="filterRecharges('cancelled')">已取消</button>
                 </div>
                 <div style="display:flex;gap:8px">
                     <button class="btn-admin danger" onclick="clearRechargeHistory()">清空历史</button>
