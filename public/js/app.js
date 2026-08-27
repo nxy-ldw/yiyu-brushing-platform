@@ -2739,11 +2739,11 @@ async function loadAdminPaySettings() {
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
                     <div class="admin-form-group">
                         <label>微信收款码</label>
-                        ${createImageUploader('payWechatQr', 'payWechatQrPreview', s.wechat_qr || '')}
+                        ${createInlineImageUploader('payWechatQr', 'payWechatQrPreview', s.wechat_qr || '')}
                     </div>
                     <div class="admin-form-group">
                         <label>支付宝收款码</label>
-                        ${createImageUploader('payAlipayQr', 'payAlipayQrPreview', s.alipay_qr || '')}
+                        ${createInlineImageUploader('payAlipayQr', 'payAlipayQrPreview', s.alipay_qr || '')}
                     </div>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
@@ -2801,6 +2801,21 @@ async function uploadImage(file, inputId) {
     });
 }
 
+function createInlineImageUploader(inputId, previewId, currentValue) {
+    return `
+        <div style="position:relative">
+            <input type="text" id="${inputId}" value="${currentValue || ''}" placeholder="图片URL或base64" style="width:100%;padding:8px 12px;border:1px solid #ddd;border-radius:6px;padding-right:90px;font-size:12px">
+            <label style="position:absolute;right:4px;top:50%;transform:translateY(-50%);padding:4px 12px;background:var(--primary);color:#fff;border-radius:4px;font-size:12px;cursor:pointer">
+                上传
+                <input type="file" accept="image/*" style="display:none" onchange="handleInlineImageUpload(this, '${inputId}', '${previewId}')">
+            </label>
+        </div>
+        <div id="${previewId}" style="margin-top:10px;min-height:120px;border:1px dashed #ddd;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fafafa">
+            ${currentValue ? `<img src="${currentValue}" style="max-width:120px;max-height:120px">` : '<span style="color:#999;font-size:13px">图片预览</span>'}
+        </div>
+    `;
+}
+
 function createImageUploader(inputId, previewId, currentValue) {
     return `
         <div style="position:relative">
@@ -2832,6 +2847,27 @@ async function handleImageUpload(input, urlInputId, previewId) {
     } catch (err) {
         showToast(err.message, 'error');
     }
+}
+
+// 内联上传（base64直存，用于支付二维码等，防止部署后丢失）
+function handleInlineImageUpload(input, urlInputId, previewId) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+        showToast('二维码图片不能超过2MB', 'error');
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const base64 = e.target.result;
+        $(urlInputId).value = base64;
+        $(previewId).innerHTML = `<img src="${base64}" style="max-width:120px;max-height:120px">`;
+        showToast('上传成功', 'success');
+    };
+    reader.onerror = function() {
+        showToast('图片读取失败', 'error');
+    };
+    reader.readAsDataURL(file);
 }
 
 async function savePaySettings() {
