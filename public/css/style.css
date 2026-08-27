@@ -336,11 +336,12 @@ img{max-width:100%;display:block}
 .pay-method-tab{flex:1;padding:14px;border:2px solid var(--border);border-radius:12px;background:#fff;font-size:15px;font-weight:500;color:#666;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
 .pay-method-tab:hover{border-color:var(--primary);color:var(--primary)}
 .pay-method-tab.active{border-color:var(--primary);background:linear-gradient(135deg,rgba(102,126,234,0.1),rgba(118,75,162,0.1));color:var(--primary)}
-.pay-qr-container{width:220px;height:220px;margin:0 auto 16px;border:1px solid #eee;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#fafafa;overflow:hidden}
-.pay-qr-img{width:100%;height:100%;object-fit:cover}
-.pay-qr-placeholder{color:#bbb;text-align:center}
+.pay-qr-container{width:100%;max-width:240px;aspect-ratio:1/1;margin:0 auto 16px;border:1px solid #eee;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#fafafa;overflow:hidden}
+.pay-qr-img{width:100%;height:100%;object-fit:contain;display:block}
+.pay-qr-placeholder{color:#bbb;text-align:center;padding:20px}
 .pay-qr-placeholder svg{opacity:.4}
 .pay-qr-placeholder p{font-size:14px;margin-top:12px}
+.pay-qr-loading{color:#999;font-size:13px;text-align:center}
 .pay-tip{font-size:14px;color:#666;margin-bottom:24px}
 .pay-actions{display:flex;gap:12px}
 .pay-actions .btn-secondary,.pay-actions .btn-primary{flex:1}

@@ -883,7 +883,27 @@ function updatePayQr(settings) {
     const container = $('payQrContainer');
     const qrUrl = currentPayMethod === 'wechat' ? settings.wechat_qr : settings.alipay_qr;
     if (qrUrl) {
-        container.innerHTML = `<img src="${qrUrl}" class="pay-qr-img" alt="收款码">`;
+        container.innerHTML = `<div class="pay-qr-loading"><div class="spinner" style="width:30px;height:30px;margin:0 auto 8px;border-width:2px"></div>加载中...</div>`;
+        const img = new Image();
+        img.className = 'pay-qr-img';
+        img.alt = currentPayMethod === 'wechat' ? '微信收款码' : '支付宝收款码';
+        img.onload = function() {
+            container.innerHTML = '';
+            container.appendChild(img);
+        };
+        img.onerror = function() {
+            container.innerHTML = `
+                <div class="pay-qr-placeholder">
+                    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <p>图片加载失败</p>
+                    <p style="font-size:12px;color:#999;margin-top:4px">请联系管理员</p>
+                </div>`;
+        };
+        img.src = qrUrl;
     } else {
         container.innerHTML = `
             <div class="pay-qr-placeholder">
