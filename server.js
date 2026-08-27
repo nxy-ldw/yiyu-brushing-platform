@@ -383,6 +383,25 @@ app.post('/api/recharge/confirm', authMiddleware, async (req, res) => {
   }
 });
 
+// 用户取消充值订单
+app.post('/api/recharge/cancel', authMiddleware, async (req, res) => {
+  try {
+    const { rechargeId } = req.body;
+    const recharge = store.findOne('recharges', { id: parseInt(rechargeId), user_id: req.user.id });
+    if (!recharge) return res.status(400).json({ error: '充值订单不存在' });
+    if (recharge.status !== 'pending') return res.status(400).json({ error: '订单状态不可取消' });
+
+    store.update('recharges', { id: recharge.id }, {
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString()
+    });
+
+    res.json({ success: true, message: '订单已取消' });
+  } catch (err) {
+    res.status(500).json({ error: '取消订单失败' });
+  }
+});
+
 // 管理员：充值审核列表
 app.get('/api/admin/recharges', authMiddleware, adminMiddleware, async (req, res) => {
   try {

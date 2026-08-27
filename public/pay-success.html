@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>支付完成 - 一屿刷课平台</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+    background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px
+  }
+  .container{
+    background:#fff;border-radius:24px;
+    max-width:480px;width:100%;
+    padding:48px 40px;text-align:center;
+    box-shadow:0 20px 60px rgba(0,0,0,0.15);
+    animation:slideUp 0.6s ease-out
+  }
+  @keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+  .check-icon{
+    width:80px;height:80px;margin:0 auto 24px;
+    background:linear-gradient(135deg,#43e97b,#38f9d7);
+    border-radius:50%;display:flex;align-items:center;justify-content:center;
+    animation:bounce 0.6s ease-out 0.3s both
+  }
+  @keyframes bounce{0%{transform:scale(0)}60%{transform:scale(1.1)}100%{transform:scale(1)}}
+  .check-icon svg{width:40px;height:40px;color:#fff;stroke-width:3}
+  h1{font-size:24px;color:#1a1a2e;margin-bottom:12px;font-weight:700}
+  .subtitle{font-size:15px;color:#6b7280;line-height:1.7;margin-bottom:32px}
+  .info-card{
+    background:linear-gradient(135deg,#f0f4ff,#e8eeff);
+    border-radius:16px;padding:24px;margin-bottom:32px
+  }
+  .info-card p{font-size:14px;color:#4a5568;line-height:1.8}
+  .contact-section{
+    display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px
+  }
+  .contact-item{
+    background:#f8f9fa;border:1px solid #e9ecef;border-radius:12px;
+    padding:20px 12px;text-align:center;transition:all 0.3s;cursor:pointer
+  }
+  .contact-item:hover{background:#eef2ff;border-color:#c7d2fe;transform:translateY(-2px)}
+  .contact-item .icon{width:36px;height:36px;margin:0 auto 8px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+  .contact-item .icon svg{width:20px;height:20px}
+  .contact-item .label{font-size:12px;color:#9ca3af;margin-bottom:4px}
+  .contact-item .value{font-size:15px;color:#1a1a2e;font-weight:600}
+  .qq-icon{background:linear-gradient(135deg,#12b7f5,#0d8abd)}
+  .qq-icon svg{color:#fff}
+  .group-icon{background:linear-gradient(135deg,#ffb13d,#ff7e5f)}
+  .group-icon svg{color:#fff}
+  .tips{font-size:12px;color:#9ca3af;line-height:1.6;margin-bottom:28px;padding:0 8px}
+  .btn{
+    display:block;width:100%;padding:14px;border:none;border-radius:12px;
+    font-size:16px;font-weight:600;cursor:pointer;text-decoration:none;
+    transition:all 0.3s;margin-bottom:12px
+  }
+  .btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+  .btn-primary:hover{opacity:0.9;transform:translateY(-1px)}
+  .btn-secondary{background:#f3f4f6;color:#6b7280}
+  .btn-secondary:hover{background:#e5e7eb}
+  .footer{text-align:center;font-size:11px;color:#d1d5db;margin-top:20px}
+  .spinner{
+    width:28px;height:28px;margin:0 auto 8px;
+    border:3px solid #e5e7eb;border-top-color:#667eea;
+    border-radius:50%;animation:spin 1s linear infinite
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .waiting{text-align:center;padding:8px 0}
+  .waiting p{font-size:12px;color:#9ca3af}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="check-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  </div>
+  <h1>您已完成支付</h1>
+  <p class="subtitle">请耐心等待到账<br>管理员审核通过后余额将自动到账</p>
+
+  <div class="info-card">
+    <p>正常情况下 <strong>1-30分钟</strong> 内完成审核到账<br>
+    若长时间未被处理，请联系管理员</p>
+  </div>
+
+  <div class="contact-section">
+    <a class="contact-item" href="javascript:void(0)" onclick="copyText('2947543703')">
+      <div class="icon qq-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.5 2 6 4.5 6 8c0 1.5.5 3 1 4-.5.5-1 1.5-1 2.5 0 .5.5 1 1 1 .5 0 1-.5 1.5-1 .5 1 1.5 2 3 2s2.5-1 3-2c.5.5 1 1 1.5 1 .5 0 1-.5 1-1 0-1-.5-2-1-2.5.5-1 1-2.5 1-4 0-3.5-2.5-6-6-6z"/></svg>
+      </div>
+      <div class="label">客服QQ</div>
+      <div class="value">2947543703</div>
+    </a>
+    <a class="contact-item" href="javascript:void(0)" onclick="copyText('1042538849')">
+      <div class="icon group-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.5L19 8l-7 3.5L5 8l7-3.5zM4 9.5l7 3.5v7.5l-7-3.5V9.5zm16 7.5l-7 3.5v-7.5l7-3.5V17z"/></svg>
+      </div>
+      <div class="label">售后群</div>
+      <div class="value">1042538849</div>
+    </a>
+  </div>
+
+  <div class="tips">
+    点击上方联系方式可一键复制<br>
+    工作时间：09:00 - 23:00
+  </div>
+
+  <div class="waiting">
+    <div class="spinner"></div>
+    <p>正在等待审核...</p>
+  </div>
+
+  <a class="btn btn-primary" href="/">返回首页</a>
+  <a class="btn btn-secondary" href="/#recharge">查看充值记录</a>
+
+  <div class="footer">一屿文化出品 © 2026</div>
+</div>
+<script>
+function copyText(text){
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(function(){alert('已复制：'+text)});
+  }else{
+    var t=document.createElement('textarea');t.value=text;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);alert('已复制：'+text);
+  }
+}
+</script>
+</body>
+</html>

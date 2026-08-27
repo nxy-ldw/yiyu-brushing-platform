@@ -609,7 +609,8 @@ async function loadRechargeHistory() {
             'pending': { text: '待支付', color: '#999' },
             'waiting_confirm': { text: '待审核', color: '#f59e0b' },
             'success': { text: '已到账', color: '#10b981' },
-            'rejected': { text: '已拒绝', color: '#ef4444' }
+            'rejected': { text: '已拒绝', color: '#ef4444' },
+            'cancelled': { text: '已取消', color: '#6b7280' }
         };
         const methodMap = { 'wechat': '微信', 'alipay': '支付宝' };
         const container = $('rechargeHistory');
@@ -646,10 +647,32 @@ async function loadRechargeHistory() {
                     <span>${fmtDate(r.created_at)}</span>
                 </div>
                 ${r.reject_reason ? `<div style="margin-top:8px;padding:8px;background:#fef2f2;border-radius:6px;font-size:12px;color:#ef4444">拒绝原因：${r.reject_reason}</div>` : ''}
+                ${r.status === 'pending' ? `<div style="display:flex;gap:8px;margin-top:12px">
+                    <button class="btn-primary" style="flex:1;padding:8px 0;font-size:13px;border-radius:8px" onclick="continueRecharge(${r.id}, ${r.amount})">继续支付</button>
+                    <button class="btn-secondary" style="flex:1;padding:8px 0;font-size:13px;border-radius:8px" onclick="cancelRecharge(${r.id})">取消订单</button>
+                </div>` : ''}
             </div>`;
         }).join('');
     } catch (err) {
         $('rechargeHistory').innerHTML = '<div style="text-align:center;padding:30px;color:#ef4444">加载失败</div>';
+    }
+}
+
+function continueRecharge(rechargeId, amount) {
+    currentRechargeId = rechargeId;
+    $('payAmount').textContent = amount;
+    loadPayPage();
+    navigate('pay');
+}
+
+async function cancelRecharge(rechargeId) {
+    if (!confirm('确定取消此充值订单吗？')) return;
+    try {
+        await api('/recharge/cancel', 'POST', { rechargeId });
+        showToast('订单已取消', 'success');
+        loadRecharge();
+    } catch (err) {
+        showToast(err.message, 'error');
     }
 }
 
@@ -725,12 +748,23 @@ async function confirmPaySuccess() {
             payMethod: currentPayMethod || 'wechat',
             txnId: txnId
         });
-        showToast(data.message, 'success');
         currentRechargeId = null;
         selectedRechargeAmount = null;
         $('payTxnId').value = '';
         await refreshUser();
-        navigate('pay-success');
+
+        // 检查是否配置了跳转链接
+        try {
+            const payRes = await api('/pay-settings', 'GET', null, false);
+            const ps = payRes.settings || {};
+            if (ps.success_redirect_url) {
+                window.location.href = ps.success_redirect_url;
+                return;
+            }
+        } catch {}
+
+        // 默认跳转到静态支付完成页
+        window.location.href = '/pay-success.html';
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -2413,6 +2447,7 @@ async function loadAdminPaySettings() {
                 <div class="admin-form-group">
                     <label>成功页跳转链接（选填，设置后支付成功将自动跳转）</label>
                     <input type="text" id="paySuccessRedirect" value="${s.success_redirect_url || ''}" placeholder="https://...">
+                    <div style="font-size:11px;color:#999;margin-top:6px">留空则默认跳转到内置支付完成页（/pay-success.html）</div>
                 </div>
                 <div style="margin-top:20px">
                     <button class="btn-admin btn-primary" onclick="savePaySettings()">保存设置</button>
