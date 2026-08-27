@@ -293,7 +293,7 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     store.insert('messages', { user_id: req.user.id, title: '下单成功', content: `您的订单 ${orderNo} 已创建，商品：${product.title}，金额：${total.toFixed(4)}元`, type: 'order', is_read: 0, created_at: new Date().toISOString() });
 
     // 新订单通知
-    sendNotification('【新订单提醒】', 
+    await sendNotification('【新订单提醒】',
       `订单号：${orderNo}\n商品：${product.title}\n金额：${total.toFixed(2)}元\n账号：${account}\n学校：${school || '-'}\n课程：${course_name || '-'}\n请及时处理！`);
 
     res.json({ order });
@@ -374,7 +374,7 @@ app.post('/api/recharge/confirm', authMiddleware, async (req, res) => {
     const user = store.findOne('users', { id: req.user.id });
     const methodName = payMethod === 'alipay' ? '支付宝' : '微信';
     const totalAmount = parseFloat(recharge.amount) + parseFloat(recharge.bonus || 0);
-    sendNotification('【充值审核提醒】', 
+    await sendNotification('【充值审核提醒】',
       `用户：${user?.username || '未知'}\n手机：${user?.phone || '-'}\n金额：${recharge.amount}元\n赠送：${recharge.bonus || 0}元\n到账：${totalAmount}元\n支付方式：${methodName}\n交易单号：${txnId}\n请及时审核！`);
 
     res.json({ success: true, message: '已提交支付凭证，请等待管理员审核' });
@@ -496,6 +496,192 @@ app.post('/api/admin/recharges/:id/reject', authMiddleware, adminMiddleware, asy
   }
 });
 
+// ===================== 充值/提现 历史清空与恢复 =====================
+
+// 充值审核：清空已处理的记录（保留 pending 和 waiting_confirm）
+app.post('/api/admin/recharges/clear-history', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { keepStatus } = req.body;
+    // keepStatus: 'all' 清空全部, 'processed' 只清空已处理的(success/rejected/cancelled)
+    const keep = keepStatus === 'processed';
+    const recharges = store.findMany('recharges', {}, {}).rows;
+    const toDelete = recharges.filter(r => {
+      if (keep) return ['success', 'rejected', 'cancelled'].includes(r.status);
+      return true;
+    });
+
+    // 先备份要删除的记录
+    const backups = store.findMany('recharge_backups', {}, {}) || { rows: [] };
+    for (const r of toDelete) {
+      store.insert('recharge_backups', {
+        original_id: r.id,
+        user_id: r.user_id,
+        amount: r.amount,
+        bonus: r.bonus || 0,
+        method: r.method,
+        txn_id: r.txn_id,
+        status: r.status,
+        reject_reason: r.reject_reason || '',
+        created_at: r.created_at,
+        updated_at: r.updated_at || r.created_at,
+        approved_at: r.approved_at || '',
+        backup_at: new Date().toISOString()
+      });
+      store.delete('recharges', { id: r.id });
+    }
+
+    res.json({ success: true, cleared: toDelete.length });
+  } catch (err) {
+    console.error('Clear recharge history error:', err);
+    res.status(500).json({ error: '清空失败' });
+  }
+});
+
+// 提现审核：清空已处理的记录（保留 pending）
+app.post('/api/admin/withdrawals/clear-history', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { keepStatus } = req.body;
+    const keep = keepStatus === 'processed';
+    const withdrawals = store.findMany('withdrawals', {}, {}).rows;
+    const toDelete = withdrawals.filter(w => {
+      if (keep) return ['approved', 'rejected', 'paid'].includes(w.status);
+      return true;
+    });
+
+    for (const w of toDelete) {
+      store.insert('withdrawal_backups', {
+        original_id: w.id,
+        withdraw_no: w.withdraw_no,
+        user_id: w.user_id,
+        amount: w.amount,
+        fee: w.fee,
+        actual_amount: w.actual_amount,
+        wechat_account: w.wechat_account,
+        wechat_name: w.wechat_name,
+        qrcode_image: w.qrcode_image || '',
+        remark: w.remark || '',
+        status: w.status,
+        reject_reason: w.reject_reason || '',
+        created_at: w.created_at,
+        updated_at: w.updated_at || w.created_at,
+        backup_at: new Date().toISOString()
+      });
+      store.delete('withdrawals', { id: w.id });
+    }
+
+    res.json({ success: true, cleared: toDelete.length });
+  } catch (err) {
+    console.error('Clear withdrawal history error:', err);
+    res.status(500).json({ error: '清空失败' });
+  }
+});
+
+// 充值审核：恢复已清空的记录（可选时间段）
+app.post('/api/admin/recharges/restore', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body;
+    const backups = store.findMany('recharge_backups', {}, { sort: { backup_at: 'desc' } }).rows;
+
+    const filtered = backups.filter(b => {
+      if (!startDate && !endDate) return true;
+      const bDate = new Date(b.created_at);
+      if (startDate && bDate < new Date(startDate)) return false;
+      if (endDate && bDate > new Date(endDate + 'T23:59:59')) return false;
+      return true;
+    });
+
+    let restored = 0;
+    for (const b of filtered) {
+      // 检查是否已恢复
+      const existing = store.findOne('recharges', { id: b.original_id });
+      if (existing) continue;
+
+      store.insert('recharges', {
+        id: b.original_id,
+        user_id: b.user_id,
+        amount: b.amount,
+        bonus: b.bonus,
+        method: b.method,
+        txn_id: b.txn_id,
+        status: b.status,
+        reject_reason: b.reject_reason,
+        created_at: b.created_at,
+        updated_at: b.updated_at,
+        approved_at: b.approved_at
+      });
+      store.delete('recharge_backups', { id: b.id });
+      restored++;
+    }
+
+    res.json({ success: true, restored });
+  } catch (err) {
+    console.error('Restore recharge history error:', err);
+    res.status(500).json({ error: '恢复失败' });
+  }
+});
+
+// 提现审核：恢复已清空的记录（可选时间段）
+app.post('/api/admin/withdrawals/restore', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.body;
+    const backups = store.findMany('withdrawal_backups', {}, { sort: { backup_at: 'desc' } }).rows;
+
+    const filtered = backups.filter(b => {
+      if (!startDate && !endDate) return true;
+      const bDate = new Date(b.created_at);
+      if (startDate && bDate < new Date(startDate)) return false;
+      if (endDate && bDate > new Date(endDate + 'T23:59:59')) return false;
+      return true;
+    });
+
+    let restored = 0;
+    for (const b of filtered) {
+      const existing = store.findOne('withdrawals', { id: b.original_id });
+      if (existing) continue;
+
+      store.insert('withdrawals', {
+        id: b.original_id,
+        withdraw_no: b.withdraw_no,
+        user_id: b.user_id,
+        amount: b.amount,
+        fee: b.fee,
+        actual_amount: b.actual_amount,
+        wechat_account: b.wechat_account,
+        wechat_name: b.wechat_name,
+        qrcode_image: b.qrcode_image,
+        remark: b.remark,
+        status: b.status,
+        reject_reason: b.reject_reason,
+        created_at: b.created_at,
+        updated_at: b.updated_at
+      });
+      store.delete('withdrawal_backups', { id: b.id });
+      restored++;
+    }
+
+    res.json({ success: true, restored });
+  } catch (err) {
+    console.error('Restore withdrawal history error:', err);
+    res.status(500).json({ error: '恢复失败' });
+  }
+});
+
+// 获取备份记录列表
+app.get('/api/admin/backups/list', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const rechargeBackups = store.findMany('recharge_backups', {}, { sort: { backup_at: 'desc' } }).rows;
+    const withdrawalBackups = store.findMany('withdrawal_backups', {}, { sort: { backup_at: 'desc' } }).rows;
+    res.json({
+      rechargeBackups: rechargeBackups.length,
+      withdrawalBackups: withdrawalBackups.length,
+      rechargeList: rechargeBackups.slice(0, 50),
+      withdrawalList: withdrawalBackups.slice(0, 50)
+    });
+  } catch (err) {
+    res.status(500).json({ error: '获取失败' });
+  }
+});
+
 // ===================== 提现功能 =====================
 
 const MIN_WITHDRAW = 200;
@@ -551,7 +737,7 @@ app.post('/api/withdrawals', authMiddleware, async (req, res) => {
 
     // 提现审核通知
     const wUser = store.findOne('users', { id: req.user.id });
-    sendNotification('【提现审核提醒】', 
+    await sendNotification('【提现审核提醒】',
       `单号：${withdrawNo}\n用户：${wUser?.username || '未知'}\n手机：${wUser?.phone || '-'}\n提现金额：${amt}元\n手续费：${fee.toFixed(2)}元\n实际到账：${actualAmount.toFixed(2)}元\n微信号：${wechat_account}\n姓名：${wechat_name}\n${remark ? '备注：' + remark + '\n' : ''}请及时审核！`);
 
     res.json({ withdrawal });
@@ -1463,7 +1649,12 @@ app.post('/api/admin/test-email', authMiddleware, adminMiddleware, async (req, r
 async function sendNotification(title, content) {
   try {
     const settings = store.findOne('site_settings', { id: 1 });
-    if (!settings || !settings.notify_enabled) return;
+    if (!settings || !settings.notify_enabled) {
+      console.log('[通知] 通知未开启，跳过');
+      return;
+    }
+
+    console.log(`[通知] 开始发送: ${title}`);
 
     // Server酱微信推送
     if (settings.sct_key) {
@@ -1472,9 +1663,10 @@ async function sendNotification(title, content) {
         const params = new URLSearchParams();
         params.append('title', title);
         params.append('desp', content);
-        await fetch(url, { method: 'POST', body: params });
+        const resp = await fetch(url, { method: 'POST', body: params });
+        console.log(`[通知] Server酱响应: ${resp.status}`);
       } catch (e) {
-        console.error('Server酱推送失败:', e.message);
+        console.error('[通知] Server酱推送失败:', e.message);
       }
     }
 
@@ -1485,7 +1677,8 @@ async function sendNotification(title, content) {
         if (provider === 'resend' && settings.resend_api_key) {
           // Resend API 模式
           const fromAddr = settings.resend_from || 'onboarding@resend.dev';
-          await fetch('https://api.resend.com/emails', {
+          console.log(`[通知] Resend发送: from=${fromAddr}, to=${settings.notify_email}`);
+          const resp = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
               'Authorization': 'Bearer ' + settings.resend_api_key,
@@ -1498,6 +1691,12 @@ async function sendNotification(title, content) {
               text: content
             })
           });
+          const respData = await resp.json();
+          if (!resp.ok) {
+            console.error(`[通知] Resend失败: ${resp.status}`, respData);
+          } else {
+            console.log(`[通知] Resend成功: id=${respData.id}`);
+          }
         } else if (settings.smtp_host && settings.smtp_user) {
           // SMTP 模式
           const nodemailer = require('nodemailer');
@@ -1516,13 +1715,16 @@ async function sendNotification(title, content) {
             subject: title,
             text: content
           });
+          console.log('[通知] SMTP邮件发送成功');
         }
       } catch (e) {
-        console.error('邮件推送失败:', e.message);
+        console.error('[通知] 邮件推送失败:', e.message);
       }
+    } else {
+      console.log(`[通知] 邮件未发送: email_enabled=${settings.email_enabled}, notify_email=${settings.notify_email}`);
     }
   } catch (e) {
-    console.error('发送通知异常:', e.message);
+    console.error('[通知] 发送通知异常:', e.message);
   }
 }
 

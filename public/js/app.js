@@ -2027,6 +2027,10 @@ async function loadAdminRecharges() {
                     <button class="btn-admin ${rechargeFilter==='success'?'primary':''}" onclick="filterRecharges('success')">已通过</button>
                     <button class="btn-admin ${rechargeFilter==='rejected'?'primary':''}" onclick="filterRecharges('rejected')">已拒绝</button>
                 </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn-admin danger" onclick="clearRechargeHistory()">清空历史</button>
+                    <button class="btn-admin" onclick="showRechargeRestore()">恢复记录</button>
+                </div>
             </div>
             <div class="admin-table">
                 <table>
@@ -2095,6 +2099,78 @@ async function rejectRecharge(id) {
     }
 }
 
+// 充值清空历史
+async function clearRechargeHistory() {
+    const mode = confirm('点击"确定"=清空已处理记录(保留待审核)\n点击"取消"=清空全部记录(含待审核)') ? 'processed' : 'all';
+    if (!confirm(`确认${mode === 'processed' ? '清空已处理的充值记录' : '清空全部充值记录'}？\n清空后可通过"恢复记录"找回`)) return;
+    try {
+        const data = await api('/admin/recharges/clear-history', 'POST', { keepStatus: mode });
+        showToast(`已清空 ${data.cleared} 条记录`, 'success');
+        loadAdminRecharges();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// 充值恢复记录
+async function showRechargeRestore() {
+    try {
+        const data = await api('/admin/backups/list', 'GET', null, false);
+        if (data.rechargeBackups === 0) {
+            showToast('没有可恢复的充值记录', 'info');
+            return;
+        }
+
+        const startDate = prompt('恢复起始日期（留空=不限），格式 YYYY-MM-DD：') || '';
+        const endDate = prompt('恢复结束日期（留空=不限），格式 YYYY-MM-DD：') || '';
+
+        const r = await api('/admin/recharges/restore', 'POST', {
+            startDate: startDate || null,
+            endDate: endDate || null
+        });
+        showToast(`已恢复 ${r.restored} 条充值记录`, 'success');
+        loadAdminRecharges();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// 提现清空历史
+async function clearWithdrawalHistory() {
+    const mode = confirm('点击"确定"=清空已处理记录(保留待审核)\n点击"取消"=清空全部记录(含待审核)') ? 'processed' : 'all';
+    if (!confirm(`确认${mode === 'processed' ? '清空已处理的提现记录' : '清空全部提现记录'}？\n清空后可通过"恢复记录"找回`)) return;
+    try {
+        const data = await api('/admin/withdrawals/clear-history', 'POST', { keepStatus: mode });
+        showToast(`已清空 ${data.cleared} 条记录`, 'success');
+        loadAdminWithdrawals();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+// 提现恢复记录
+async function showWithdrawalRestore() {
+    try {
+        const data = await api('/admin/backups/list', 'GET', null, false);
+        if (data.withdrawalBackups === 0) {
+            showToast('没有可恢复的提现记录', 'info');
+            return;
+        }
+
+        const startDate = prompt('恢复起始日期（留空=不限），格式 YYYY-MM-DD：') || '';
+        const endDate = prompt('恢复结束日期（留空=不限），格式 YYYY-MM-DD：') || '';
+
+        const r = await api('/admin/withdrawals/restore', 'POST', {
+            startDate: startDate || null,
+            endDate: endDate || null
+        });
+        showToast(`已恢复 ${r.restored} 条提现记录`, 'success');
+        loadAdminWithdrawals();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
 // ===== 提现审核 =====
 let withdrawFilter = 'all';
 async function loadAdminWithdrawals() {
@@ -2115,6 +2191,10 @@ async function loadAdminWithdrawals() {
                     <button class="btn-admin ${withdrawFilter==='pending'?'primary':''}" onclick="filterWithdrawals('pending')">待审核</button>
                     <button class="btn-admin ${withdrawFilter==='approved'?'primary':''}" onclick="filterWithdrawals('approved')">已通过</button>
                     <button class="btn-admin ${withdrawFilter==='rejected'?'primary':''}" onclick="filterWithdrawals('rejected')">已拒绝</button>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn-admin danger" onclick="clearWithdrawalHistory()">清空历史</button>
+                    <button class="btn-admin" onclick="showWithdrawalRestore()">恢复记录</button>
                 </div>
             </div>
             <div class="admin-table">
