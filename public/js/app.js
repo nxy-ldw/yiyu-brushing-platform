@@ -647,14 +647,54 @@ async function loadRechargeHistory() {
                     <span>${fmtDate(r.created_at)}</span>
                 </div>
                 ${r.reject_reason ? `<div style="margin-top:8px;padding:8px;background:#fef2f2;border-radius:6px;font-size:12px;color:#ef4444">拒绝原因：${r.reject_reason}</div>` : ''}
-                ${r.status === 'pending' ? `<div style="display:flex;gap:8px;margin-top:12px">
+                ${r.status === 'pending' ? `
+                <div id="recharge-countdown-${r.id}" style="margin-top:8px;padding:6px 10px;background:#fff7e6;border-radius:6px;font-size:12px;color:#f59e0b;text-align:center" data-created="${r.created_at}">
+                    剩余 <span class="cd-time">30:00</span> 后自动取消
+                </div>
+                <div style="display:flex;gap:8px;margin-top:8px">
                     <button class="btn-primary" style="flex:1;padding:8px 0;font-size:13px;border-radius:8px" onclick="continueRecharge(${r.id}, ${r.amount})">继续支付</button>
                     <button class="btn-secondary" style="flex:1;padding:8px 0;font-size:13px;border-radius:8px" onclick="cancelRecharge(${r.id})">取消订单</button>
                 </div>` : ''}
             </div>`;
         }).join('');
+
+        startRechargeCountdowns();
     } catch (err) {
         $('rechargeHistory').innerHTML = '<div style="text-align:center;padding:30px;color:#ef4444">加载失败</div>';
+    }
+}
+
+let rechargeCountdownTimer = null;
+function startRechargeCountdowns() {
+    if (rechargeCountdownTimer) clearInterval(rechargeCountdownTimer);
+    updateRechargeCountdowns();
+    rechargeCountdownTimer = setInterval(updateRechargeCountdowns, 1000);
+}
+
+function updateRechargeCountdowns() {
+    const countdowns = document.querySelectorAll('[id^="recharge-countdown-"]');
+    if (countdowns.length === 0) {
+        if (rechargeCountdownTimer) { clearInterval(rechargeCountdownTimer); rechargeCountdownTimer = null; }
+        return;
+    }
+    const now = new Date();
+    let allExpired = true;
+    countdowns.forEach(el => {
+        const created = new Date(el.dataset.created);
+        const expireAt = new Date(created.getTime() + 30 * 60000);
+        const remain = expireAt - now;
+        if (remain <= 0) {
+            el.innerHTML = '<span style="color:#ef4444">已超时，订单即将自动取消</span>';
+        } else {
+            allExpired = false;
+            const min = Math.floor(remain / 60000);
+            const sec = Math.floor((remain % 60000) / 1000);
+            el.querySelector('.cd-time').textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+            if (min < 5) el.style.background = '#fee2e2';
+        }
+    });
+    if (allExpired && countdowns.length > 0) {
+        setTimeout(() => loadRecharge(), 3000);
     }
 }
 
@@ -699,6 +739,7 @@ async function goToPayPage(amount, bonus) {
 
 let currentPayMethod = 'wechat';
 let currentPayBonus = 0;
+let payCountdownTimer = null;
 
 async function loadPayPage() {
     try {
@@ -710,6 +751,43 @@ async function loadPayPage() {
     } catch {
         updatePayQr({});
     }
+    startPayCountdown();
+}
+
+function startPayCountdown() {
+    if (payCountdownTimer) clearInterval(payCountdownTimer);
+    if (!currentRechargeId) return;
+
+    const cdEl = $('payCountdown');
+    const cdTime = $('payCountdownTime');
+    if (!cdEl || !cdTime) return;
+
+    const fetchRecharge = async () => {
+        try {
+            const data = await api('/user/recharges', 'GET', null, false);
+            const r = data.recharges.find(x => x.id === currentRechargeId);
+            if (!r || r.status !== 'pending') {
+                cdEl.style.display = 'none';
+                if (payCountdownTimer) { clearInterval(payCountdownTimer); payCountdownTimer = null; }
+                return;
+            }
+            cdEl.style.display = 'block';
+            const created = new Date(r.created_at);
+            const expireAt = new Date(created.getTime() + 30 * 60000);
+            const remain = expireAt - new Date();
+            if (remain <= 0) {
+                cdEl.innerHTML = '<span style="color:#ef4444">已超时，订单即将自动取消</span>';
+                if (payCountdownTimer) { clearInterval(payCountdownTimer); payCountdownTimer = null; }
+                return;
+            }
+            const min = Math.floor(remain / 60000);
+            const sec = Math.floor((remain % 60000) / 1000);
+            cdTime.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+            if (min < 5) { cdEl.style.background = '#fee2e2'; cdEl.style.color = '#ef4444'; }
+        } catch {}
+    };
+    fetchRecharge();
+    payCountdownTimer = setInterval(fetchRecharge, 1000);
 }
 
 function switchPayMethod(method, el) {
