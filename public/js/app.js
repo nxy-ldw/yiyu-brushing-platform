@@ -422,14 +422,19 @@ async function showOrderModal(productId) {
         currentProductId = productId;
         const userLevel = currentUser.agent_level || 0;
         const displayPrice = getProductPrice(p);
-        
+
+        const titleLower = (p.title || '').toLowerCase();
+        const isManualLike = titleLower.includes('手工') && titleLower.includes('点赞');
+        const isManualFollow = titleLower.includes('手工') && (titleLower.includes('关注') || titleLower.includes('粉丝'));
+        window._currentOrderType = isManualLike ? 'manual_like' : (isManualFollow ? 'manual_follow' : 'default');
+
         // 价格对比表
         const priceRows = [];
         priceRows.push(`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#666"><span>普通用户</span><span>¥${fmtPrice(p.price)}</span></div>`);
         if (p.bronze_price) priceRows.push(`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;${userLevel==1?'color:#cd7f32;font-weight:600':'color:#999'}"><span>🥉 铜牌代理</span><span>¥${fmtPrice(p.bronze_price)}</span></div>`);
         if (p.silver_price) priceRows.push(`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;${userLevel==2?'color:#c0c0c0;font-weight:600':'color:#999'}"><span>🥈 银牌代理</span><span>¥${fmtPrice(p.silver_price)}</span></div>`);
         if (p.gold_price) priceRows.push(`<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;${userLevel==3?'color:#ffd700;font-weight:600':'color:#999'}"><span>🥇 金牌代理</span><span>¥${fmtPrice(p.gold_price)}</span></div>`);
-        
+
         $('orderProductInfo').innerHTML = `
             <div style="display:flex;gap:12px;margin-bottom:12px;padding:12px;background:var(--bg);border-radius:8px">
                 <div style="width:60px;height:60px;background:linear-gradient(135deg,#f0f0f5,#e8e8f0);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--primary);opacity:.2">${p.title.charAt(0)}</div>
@@ -442,13 +447,49 @@ async function showOrderModal(productId) {
                 <div style="font-size:12px;color:#999;margin-bottom:6px">价格对比</div>
                 ${priceRows.join('')}
             </div>`;
+
+        // 根据商品类型动态生成表单字段
+        let formFields = '';
+        if (window._currentOrderType === 'manual_like') {
+            formFields = `
+                <div class="form-group"><label>视频地址 *</label><input type="text" id="orderAccount" placeholder="请输入需要点赞的视频链接地址"></div>
+                <div class="form-group"><label>备注</label><textarea id="orderRemark" placeholder="特殊要求请备注"></textarea></div>`;
+        } else if (window._currentOrderType === 'manual_follow') {
+            formFields = `
+                <div class="form-group"><label>主页链接或作品分享链接 *</label><input type="text" id="orderAccount" placeholder="请输入主页链接或作品分享链接"></div>
+                <div class="form-group"><label>备注</label><textarea id="orderRemark" placeholder="特殊要求请备注"></textarea></div>`;
+        } else {
+            formFields = `
+                <div class="form-group"><label>刷课账号 *</label><input type="text" id="orderAccount" placeholder="请输入需要刷课的账号"></div>
+                <div class="form-group"><label>登录密码 *</label><input type="text" id="orderPassword" placeholder="请输入账号登录密码"></div>
+                <div class="form-group"><label>学校名称 *</label><input type="text" id="orderSchool" placeholder="请输入学校名称"></div>
+                <div class="form-group"><label>课程名称 *</label><input type="text" id="orderCourse" placeholder="请输入课程名称"></div>
+                <div class="form-group"><label>备注</label><textarea id="orderRemark" placeholder="特殊要求请备注"></textarea></div>`;
+        }
+        const formArea = $('orderFormArea');
+        if (formArea) formArea.innerHTML = formFields;
+
+        // 显示/隐藏默认字段和须知
+        const defaultFields = document.querySelectorAll('#orderModal .default-field');
+        const noticeEl = document.querySelector('#orderModal .order-notice');
+        const qtyGroup = document.getElementById('orderQtyGroup');
+        if (window._currentOrderType === 'default') {
+            defaultFields.forEach(el => el.style.display = '');
+            if (noticeEl) noticeEl.style.display = '';
+            if (qtyGroup) qtyGroup.style.display = '';
+        } else {
+            defaultFields.forEach(el => el.style.display = 'none');
+            if (noticeEl) noticeEl.style.display = 'none';
+            if (qtyGroup) qtyGroup.style.display = '';
+        }
+
         $('orderQty').value = 1;
         $('orderTotal').textContent = fmtPrice(displayPrice) + '元';
-        $('orderAccount').value = '';
-        $('orderPassword').value = '';
-        $('orderSchool').value = '';
-        $('orderCourse').value = '';
-        $('orderRemark').value = '';
+        if ($('orderAccount')) $('orderAccount').value = '';
+        if ($('orderPassword')) $('orderPassword').value = '';
+        if ($('orderSchool')) $('orderSchool').value = '';
+        if ($('orderCourse')) $('orderCourse').value = '';
+        if ($('orderRemark')) $('orderRemark').value = '';
         $('orderModal').style.display = 'flex';
     } catch (err) {
         showToast(err.message, 'error');
@@ -475,16 +516,24 @@ async function updateOrderTotal() {
 
 async function createOrder() {
     if (!currentUser) { showToast('请先登录', 'error'); return; }
-    const account = $('orderAccount').value.trim();
-    const passwordHint = $('orderPassword').value.trim();
-    const school = $('orderSchool').value.trim();
-    const course_name = $('orderCourse').value.trim();
-    const remark = $('orderRemark').value.trim();
+    const account = $('orderAccount')?.value.trim() || '';
+    const passwordHint = $('orderPassword')?.value.trim() || '';
+    const school = $('orderSchool')?.value.trim() || '';
+    const course_name = $('orderCourse')?.value.trim() || '';
+    const remark = $('orderRemark')?.value.trim() || '';
     const quantity = parseInt($('orderQty').value) || 1;
-    if (!account) { showToast('请填写刷课账号', 'error'); return; }
-    if (!passwordHint) { showToast('请填写登录密码', 'error'); return; }
-    if (!school) { showToast('请填写学校名称', 'error'); return; }
-    if (!course_name) { showToast('请填写课程名称', 'error'); return; }
+
+    const orderType = window._currentOrderType || 'default';
+    if (orderType === 'manual_like') {
+        if (!account) { showToast('请填写视频地址', 'error'); return; }
+    } else if (orderType === 'manual_follow') {
+        if (!account) { showToast('请填写主页链接或作品分享链接', 'error'); return; }
+    } else {
+        if (!account) { showToast('请填写刷课账号', 'error'); return; }
+        if (!passwordHint) { showToast('请填写登录密码', 'error'); return; }
+        if (!school) { showToast('请填写学校名称', 'error'); return; }
+        if (!course_name) { showToast('请填写课程名称', 'error'); return; }
+    }
     try {
         const data = await api('/orders', 'POST', { productId: currentProductId, quantity, account, passwordHint, school, course_name, remark });
         closeModal('orderModal');
@@ -530,9 +579,11 @@ async function loadOrders() {
                     <div class="order-info">账号：${o.account || '-'}</div>
                     ${o.remark ? `<div class="order-info">备注：${o.remark}</div>` : ''}
                     <div class="order-info">${fmtDate(o.created_at)}</div>
+                    <button class="btn-primary" style="margin-top:8px;padding:6px 16px;font-size:13px;border-radius:8px" onclick="showMyOrderDetail(${o.id})">查看详情</button>
                 </div>
             </div>
         `).join('');
+        window._myOrders = data.orders;
     } catch (err) {
         list.innerHTML = '<div class="order-empty"><p>加载失败</p></div>';
     }
@@ -543,6 +594,37 @@ function filterOrders(status, btn) {
     document.querySelectorAll('.order-tab').forEach(t => t.classList.remove('active'));
     btn.classList.add('active');
     loadOrders();
+}
+
+function showMyOrderDetail(orderId) {
+    const order = (window._myOrders || []).find(o => o.id === orderId);
+    if (!order) return;
+    const statusText = { 'paid': '已付款', 'processing': '处理中', 'completed': '已完成', 'cancelled': '已取消', 'pending': '待付款' };
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.display = 'flex';
+    overlay.style.zIndex = '999';
+    overlay.innerHTML = `
+        <div class="modal-box" style="max-width:500px">
+            <button class="modal-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
+            <h2 style="margin-bottom:16px">订单详情</h2>
+            <div style="background:#f8f9fa;border-radius:12px;padding:20px;font-size:14px;line-height:2">
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">订单号</span><span style="font-weight:600">${order.order_no}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">商品</span><span>${order.product_title}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">金额</span><span style="color:#f5576c;font-weight:600">¥${fmtPrice(order.total)}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">状态</span><span style="font-weight:600">${statusText[order.status] || order.status}</span></div>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0">
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">账号</span><span style="font-weight:500">${order.account || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">密码</span><span style="font-weight:500">${order.password_hint || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">学校</span><span style="font-weight:500">${order.school || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">课程名称</span><span style="font-weight:500">${order.course_name || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">备注</span><span style="font-weight:500;max-width:250px;text-align:right">${order.remark || '-'}</span></div>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0">
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">下单时间</span><span>${fmtDate(order.created_at)}</span></div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
 }
 
 // ===== 进度查询 =====
@@ -2043,29 +2125,18 @@ async function loadAdminOrders() {
     try {
         const data = await api('/admin/orders');
         const statusText = { 'paid': '已付款', 'processing': '处理中', 'completed': '已完成', 'cancelled': '已取消', 'pending': '待付款' };
+        window._allOrders = data.orders;
         content.innerHTML = `
             <h3 style="margin-bottom:16px;font-size:18px">订单管理</h3>
+            <div class="admin-toolbar" style="margin-bottom:16px">
+                <input type="text" id="orderSearchInput" placeholder="输入订单号查询..." style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px" oninput="searchAdminOrders()">
+                <button class="btn-admin primary" onclick="searchAdminOrders()">查询</button>
+            </div>
             <div class="admin-table">
                 <table>
                     <thead><tr><th>订单号</th><th>用户</th><th>商品</th><th>账号</th><th>金额</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
-                    <tbody>
-                        ${data.orders.map(o => `<tr>
-                            <td>${o.order_no}</td>
-                            <td>${o.username}</td>
-                            <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis">${o.product_title}</td>
-                            <td>${o.account || '-'}</td>
-                            <td>¥${fmtPrice(o.total)}</td>
-                            <td>${statusText[o.status] || o.status}</td>
-                            <td>${fmtDate(o.created_at)}</td>
-                            <td>
-                                <select onchange="updateOrderStatus(${o.id}, this.value)" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px">
-                                    <option value="">状态</option>
-                                    <option value="processing">处理中</option>
-                                    <option value="completed">已完成</option>
-                                    <option value="cancelled">取消</option>
-                                </select>
-                            </td>
-                        </tr>`).join('')}
+                    <tbody id="adminOrdersBody">
+                        ${renderAdminOrderRows(data.orders, statusText)}
                     </tbody>
                 </table>
             </div>
@@ -2073,6 +2144,70 @@ async function loadAdminOrders() {
     } catch (err) {
         content.innerHTML = '<div style="text-align:center;padding:40px;color:#f5576c">加载失败</div>';
     }
+}
+
+function renderAdminOrderRows(orders, statusText) {
+    if (orders.length === 0) return '<tr><td colspan="8" style="text-align:center;padding:40px;color:#999">暂无数据</td></tr>';
+    return orders.map(o => `<tr>
+        <td style="cursor:pointer;color:#3b82f6" onclick="showOrderDetail(${o.id})">${o.order_no}</td>
+        <td>${o.username || '-'}</td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis" title="${o.product_title}">${o.product_title}</td>
+        <td>${o.account || '-'}</td>
+        <td>¥${fmtPrice(o.total)}</td>
+        <td>${statusText[o.status] || o.status}</td>
+        <td>${fmtDate(o.created_at)}</td>
+        <td>
+            <button class="btn-admin" style="padding:4px 10px;font-size:12px;margin-bottom:4px" onclick="showOrderDetail(${o.id})">详情</button>
+            <select onchange="updateOrderStatus(${o.id}, this.value)" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px">
+                <option value="">状态</option>
+                <option value="processing">处理中</option>
+                <option value="completed">已完成</option>
+                <option value="cancelled">取消</option>
+            </select>
+        </td>
+    </tr>`).join('');
+}
+
+function searchAdminOrders() {
+    const kw = ($('orderSearchInput')?.value || '').trim().toLowerCase();
+    const statusText = { 'paid': '已付款', 'processing': '处理中', 'completed': '已完成', 'cancelled': '已取消', 'pending': '待付款' };
+    const filtered = (window._allOrders || []).filter(o =>
+        !kw || o.order_no.toLowerCase().includes(kw) || (o.username || '').toLowerCase().includes(kw) || (o.account || '').toLowerCase().includes(kw)
+    );
+    const body = $('adminOrdersBody');
+    if (body) body.innerHTML = renderAdminOrderRows(filtered, statusText);
+}
+
+function showOrderDetail(orderId) {
+    const order = (window._allOrders || []).find(o => o.id === orderId);
+    if (!order) return;
+    const statusText = { 'paid': '已付款', 'processing': '处理中', 'completed': '已完成', 'cancelled': '已取消', 'pending': '待付款' };
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.display = 'flex';
+    overlay.style.zIndex = '999';
+    overlay.innerHTML = `
+        <div class="modal-box" style="max-width:520px">
+            <button class="modal-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
+            <h2 style="margin-bottom:16px">订单详情</h2>
+            <div style="background:#f8f9fa;border-radius:12px;padding:20px;font-size:14px;line-height:2">
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">订单号</span><span style="font-weight:600">${order.order_no}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">商品</span><span>${order.product_title}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">用户</span><span>${order.username || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">金额</span><span style="color:#f5576c;font-weight:600">¥${fmtPrice(order.total)}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">状态</span><span style="font-weight:600">${statusText[order.status] || order.status}</span></div>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0">
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">刷课账号</span><span style="font-weight:500">${order.account || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">登录密码</span><span style="font-weight:500">${order.password_hint || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">学校</span><span style="font-weight:500">${order.school || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">课程名称</span><span style="font-weight:500">${order.course_name || '-'}</span></div>
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">备注</span><span style="font-weight:500;max-width:280px;text-align:right">${order.remark || '-'}</span></div>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:12px 0">
+                <div style="display:flex;justify-content:space-between"><span style="color:#999">下单时间</span><span>${fmtDate(order.created_at)}</span></div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
 }
 
 async function updateOrderStatus(id, status) {
