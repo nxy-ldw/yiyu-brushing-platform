@@ -748,25 +748,28 @@ async function confirmPaySuccess() {
             payMethod: currentPayMethod || 'wechat',
             txnId: txnId
         });
+        showToast(data.message || '已提交', 'success');
         currentRechargeId = null;
         selectedRechargeAmount = null;
         $('payTxnId').value = '';
         await refreshUser();
-
-        // 检查是否配置了跳转链接
-        try {
-            const payRes = await api('/pay-settings', 'GET', null, false);
-            const ps = payRes.settings || {};
-            if (ps.success_redirect_url) {
-                window.location.href = ps.success_redirect_url;
-                return;
-            }
-        } catch {}
-
-        // 默认跳转到静态支付完成页
-        window.location.href = '/pay-success.html';
+        navigate('pay-success');
     } catch (err) {
         showToast(err.message, 'error');
+    }
+}
+
+function copyText(text) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => showToast('已复制：' + text, 'success'));
+    } else {
+        const t = document.createElement('textarea');
+        t.value = text;
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand('copy');
+        document.body.removeChild(t);
+        showToast('已复制：' + text, 'success');
     }
 }
 
