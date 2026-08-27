@@ -739,12 +739,6 @@ function updatePayQr(settings) {
 }
 
 async function cancelPayAndBack() {
-    if (currentRechargeId) {
-        try {
-            await api('/recharge/cancel', 'POST', { rechargeId: currentRechargeId });
-            currentRechargeId = null;
-        } catch {}
-    }
     navigate('recharge');
 }
 
