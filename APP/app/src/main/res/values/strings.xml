@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">一屿刷课</string>
+    <string name="server_url">https://yiyu-brushing-platform-production.up.railway.app</string>
+</resources>

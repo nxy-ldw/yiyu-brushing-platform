@@ -1,0 +1,22 @@
+<resources>
+    <!-- Base application theme -->
+    <style name="Theme.YiYuApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorPrimaryVariant">@color/primary_light</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="android:statusBarColor">@color/primary</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- Splash theme -->
+    <style name="Theme.YiYuApp.Splash" parent="Theme.YiYuApp">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowBackground">@drawable/bg_splash</item>
+    </style>
+
+    <!-- No ActionBar theme -->
+    <style name="Theme.YiYuApp.NoActionBar" parent="Theme.YiYuApp">
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+    </style>
+</resources>

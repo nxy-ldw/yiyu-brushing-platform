@@ -1830,7 +1830,7 @@ app.post('/api/admin/restore', authMiddleware, adminMiddleware, async (req, res)
     
     const tables = ['products', 'categories', 'banners', 'announcements', 'card_keys', 
                     'qq_groups', 'recharge_packages', 'pay_settings', 'site_settings',
-                    'group_buys', 'red_packets'];
+                    'group_buys', 'red_packets', 'app_cards'];
     
     for (const table of tables) {
       if (data[table] && Array.isArray(data[table])) {
@@ -2004,6 +2004,116 @@ app.get('/api/user/recharges', authMiddleware, async (req, res) => {
     res.json({ recharges: result.rows, total: result.total });
   } catch (err) {
     res.status(500).json({ error: '获取记录失败' });
+  }
+});
+
+// ===== APP 卡密管理 =====
+
+// 生成APP卡密（管理员）
+app.post('/api/admin/app-cards/generate', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { count = 1, expireDays = 365 } = req.body;
+    const num = Math.min(parseInt(count) || 1, 100);
+    const expireMs = (parseInt(expireDays) || 365) * 24 * 60 * 60 * 1000;
+    const cards = [];
+    for (let i = 0; i < num; i++) {
+      const cardKey = 'APP-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      const row = {
+        card_key: cardKey,
+        status: 'unused',
+        bound_device: null,
+        bound_user: null,
+        bound_at: null,
+        expire_at: new Date(Date.now() + expireMs).toISOString(),
+        created_at: new Date().toISOString()
+      };
+      store.insert('app_cards', row);
+      cards.push(cardKey);
+    }
+    res.json({ success: true, cards });
+  } catch (err) {
+    console.error('Generate app cards error:', err);
+    res.status(500).json({ error: '生成失败' });
+  }
+});
+
+// APP卡密列表（管理员）
+app.get('/api/admin/app-cards', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { status, search, page = 1, pageSize = 50 } = req.query;
+    const conditions = {};
+    if (status && status !== 'all') conditions.status = status;
+    if (search) conditions.card_key = { $like: search };
+    const result = store.findMany('app_cards', conditions, {
+      sort: { created_at: 'desc' },
+      limit: parseInt(pageSize),
+      offset: (parseInt(page) - 1) * parseInt(pageSize)
+    });
+    const total = store.count('app_cards', conditions);
+    res.json({ cards: result.rows, total, page: parseInt(page), pageSize: parseInt(pageSize) });
+  } catch (err) {
+    res.status(500).json({ error: '获取失败' });
+  }
+});
+
+// 删除APP卡密（管理员）
+app.delete('/api/admin/app-cards/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    store.remove('app_cards', { id });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: '删除失败' });
+  }
+});
+
+// 批量删除APP卡密（管理员）
+app.post('/api/admin/app-cards/batch-delete', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: '参数错误' });
+    for (const id of ids) {
+      store.remove('app_cards', { id: parseInt(id) });
+    }
+    res.json({ success: true, deleted: ids.length });
+  } catch (err) {
+    res.status(500).json({ error: '删除失败' });
+  }
+});
+
+// APP卡密验证（APP客户端）
+app.post('/api/app/verify-card', async (req, res) => {
+  try {
+    const { cardKey, deviceId } = req.body;
+    if (!cardKey) return res.status(400).json({ error: '请输入卡密' });
+    if (!deviceId) return res.status(400).json({ error: '设备标识缺失' });
+
+    const card = store.findOne('app_cards', { card_key: cardKey });
+    if (!card) return res.status(400).json({ error: '卡密不存在' });
+    if (card.status === 'bound' && card.bound_device !== deviceId) {
+      return res.status(400).json({ error: '此卡密已被其他设备绑定' });
+    }
+    if (card.expire_at && new Date(card.expire_at) < new Date()) {
+      return res.status(400).json({ error: '卡密已过期' });
+    }
+
+    // 绑定卡密到设备
+    if (card.status === 'unused') {
+      store.update('app_cards', { id: card.id }, {
+        status: 'bound',
+        bound_device: deviceId,
+        bound_at: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      cardKey: card.card_key,
+      expireAt: card.expire_at
+    });
+  } catch (err) {
+    console.error('App card verify error:', err);
+    res.status(500).json({ error: '验证失败' });
   }
 });
 

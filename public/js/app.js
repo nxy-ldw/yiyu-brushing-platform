@@ -1374,6 +1374,7 @@ function adminTab(tab, el) {
     else if (tab === 'announcements') loadAdminAnnouncements();
     else if (tab === 'banners') loadAdminBanners();
     else if (tab === 'cards') loadAdminCards();
+    else if (tab === 'app-cards') loadAdminAppCards();
     else if (tab === 'qq-groups') loadAdminQQGroups();
     else if (tab === 'pay-settings') loadAdminPaySettings();
     else if (tab === 'site-settings') loadAdminSiteSettings();
@@ -2714,6 +2715,121 @@ async function generateCards() {
         const data = await api('/admin/cards', 'POST', { count, value });
         showToast(`生成${data.cards.length}张卡密`, 'success');
         loadAdminCards();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function loadAdminAppCards() {
+    const content = $('adminContent');
+    content.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="font-size:18px">APP卡密管理</h3>
+            <div style="display:flex;gap:8px">
+                <button class="btn-admin" onclick="exportAppCards()">导出卡密</button>
+                <button class="btn-admin btn-danger" onclick="batchDeleteAppCards()">批量删除</button>
+            </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:flex-end">
+            <div class="admin-form-group" style="width:120px"><label>生成数量</label><input type="number" id="appCardCount" value="1" min="1" max="100"></div>
+            <div class="admin-form-group" style="width:120px"><label>有效天数</label><input type="number" id="appCardExpireDays" value="365" min="1"></div>
+            <button class="btn-admin btn-primary" onclick="generateAppCards()">生成卡密</button>
+        </div>
+        <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
+            <select id="appCardFilter" onchange="loadAdminAppCards()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+                <option value="">全部状态</option>
+                <option value="unused">未使用</option>
+                <option value="bound">已绑定</option>
+            </select>
+            <input type="text" id="appCardSearch" placeholder="搜索卡密..." oninput="loadAdminAppCards()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:200px">
+        </div>
+        <div class="admin-table" id="appCardsTable"><div class="loading-spinner"><div class="spinner"></div><p>加载中...</p></div></div>
+    `;
+    try {
+        const filter = $('appCardFilter') ? $('appCardFilter').value : '';
+        const search = $('appCardSearch') ? $('appCardSearch').value : '';
+        const params = new URLSearchParams();
+        if (filter) params.set('status', filter);
+        if (search) params.set('search', search);
+        const qs = params.toString() ? '?' + params.toString() : '';
+        const data = await api('/admin/app-cards' + qs, 'GET', null, false);
+        $('appCardsTable').innerHTML = `
+            <div style="margin-bottom:12px;color:#666;font-size:13px">共 ${data.total || 0} 张卡密</div>
+            <table>
+                <thead><tr><th><input type="checkbox" onclick="toggleAllAppCards(this)"></th><th>ID</th><th>卡密号</th><th>状态</th><th>绑定设备</th><th>绑定时间</th><th>过期时间</th><th>创建时间</th><th>操作</th></tr></thead>
+                <tbody>
+                    ${data.cards && data.cards.length > 0 ? data.cards.map(c => `<tr>
+                        <td><input type="checkbox" class="app-card-check" value="${c.id}"></td>
+                        <td>${c.id}</td>
+                        <td style="font-family:monospace;font-size:12px;user-select:all">${c.card_key}</td>
+                        <td><span style="padding:2px 8px;border-radius:4px;font-size:12px;background:${c.status === 'unused' ? '#e8f5e9' : '#fff3e0'};color:${c.status === 'unused' ? '#2e7d32' : '#e65100'}">${c.status === 'unused' ? '未使用' : '已绑定'}</span></td>
+                        <td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis">${c.bound_device || '-'}</td>
+                        <td style="font-size:12px">${c.bound_at ? fmtDate(c.bound_at) : '-'}</td>
+                        <td style="font-size:12px">${c.expire_at ? fmtDate(c.expire_at) : '-'}</td>
+                        <td style="font-size:12px">${fmtDate(c.created_at)}</td>
+                        <td><button class="btn-admin btn-danger" style="padding:4px 10px;font-size:12px" onclick="deleteAppCard(${c.id})">删除</button></td>
+                    </tr>`).join('') : '<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">暂无数据</td></tr>'}
+                </tbody>
+            </table>
+        `;
+    } catch (err) {
+        $('appCardsTable').innerHTML = '<p style="color:#f5576c">加载失败：' + err.message + '</p>';
+    }
+}
+
+async function generateAppCards() {
+    const count = parseInt($('appCardCount').value) || 1;
+    const expireDays = parseInt($('appCardExpireDays').value) || 365;
+    if (count > 100) { showToast('单次最多生成100张', 'error'); return; }
+    try {
+        const data = await api('/admin/app-cards/generate', 'POST', { count, expireDays });
+        showToast(`成功生成${data.cards.length}张APP卡密`, 'success');
+        loadAdminAppCards();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function deleteAppCard(id) {
+    if (!confirm('确定删除此卡密？')) return;
+    try {
+        await api('/admin/app-cards/' + id, 'DELETE');
+        showToast('删除成功', 'success');
+        loadAdminAppCards();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function batchDeleteAppCards() {
+    const checked = document.querySelectorAll('.app-card-check:checked');
+    if (checked.length === 0) { showToast('请先勾选要删除的卡密', 'error'); return; }
+    if (!confirm(`确定删除选中的${checked.length}张卡密？`)) return;
+    const ids = Array.from(checked).map(c => parseInt(c.value));
+    try {
+        await api('/admin/app-cards/batch-delete', 'POST', { ids });
+        showToast('批量删除成功', 'success');
+        loadAdminAppCards();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+function toggleAllAppCards(el) {
+    document.querySelectorAll('.app-card-check').forEach(c => c.checked = el.checked);
+}
+
+async function exportAppCards() {
+    try {
+        const data = await api('/admin/app-cards', 'GET', null, false);
+        if (!data.cards || data.cards.length === 0) { showToast('暂无卡密可导出', 'error'); return; }
+        const text = data.cards.map(c => c.card_key).join('\n');
+        const blob = new Blob([text], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'app-cards-' + new Date().toISOString().slice(0, 10) + '.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
     } catch (err) {
         showToast(err.message, 'error');
     }
