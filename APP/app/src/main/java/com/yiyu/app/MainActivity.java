@@ -87,6 +87,7 @@ public class MainActivity extends Activity {
     }
 
     private void loadMainPage() {
+        webView.clearCache(true);
         String url = ServerConfig.getWebUrl("/");
         webView.loadUrl(url);
     }
@@ -120,9 +121,8 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 pageLoaded = true;
 
-                // 注入APP标识和动态头部高度
-                String injectJs = "try { localStorage.setItem('is_app', 'true'); document.body.classList.add('is-app'); document.documentElement.style.setProperty('--app-header-h', '" + appHeaderCssPx + "px'); } catch(e) {}";
-                view.evaluateJavascript(injectJs, null);
+                // 注入APP标识
+                view.evaluateJavascript("try { localStorage.setItem('is_app', 'true'); document.body.classList.add('is-app'); } catch(e) {}", null);
 
                 // 注入卡密
                 String cardKey = prefManager.getCardKey();

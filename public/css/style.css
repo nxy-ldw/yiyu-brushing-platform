@@ -398,14 +398,14 @@ img{max-width:100%;display:block}
     .nav-item{padding:6px 8px;font-size:12px}
 }
 /* APP端样式适配 */
-body.is-app{padding-top:var(--app-header-h,48px)}
-body.is-app .header{top:var(--app-header-h,48px);backdrop-filter:none;-webkit-backdrop-filter:none;background:#fff;transition:none}
+body.is-app{padding-top:0}
+body.is-app .header{position:sticky;position:-webkit-sticky;top:0;backdrop-filter:none;-webkit-backdrop-filter:none;background:#fff;transition:none;transform:none;-webkit-transform:none}
 body.is-app .nav-menu{display:none}
 body.is-app .search-box{display:none}
 body.is-app .header-inner{height:48px;padding:0 12px}
 body.is-app .logo{font-size:16px}
 body.is-app .logo-icon{width:24px;height:24px}
-body.is-app .modal-overlay{top:var(--app-header-h,48px)}
+body.is-app .modal-overlay{top:0}
 body.is-app .product-img{height:90px}
 body.is-app .product-info{padding:5px 6px}
 body.is-app .product-title{font-size:11px}
