@@ -2,7 +2,7 @@ package com.yiyu.app;
 
 public class ServerConfig {
     // 服务器地址 - 与Railway网站地址一致
-    public static final String SERVER_URL = "https://yiyu-brushing-platform-production.up.railway.app";
+    public static final String SERVER_URL = "https://yiyusk.top";
 
     public static String getApiUrl(String path) {
         if (!path.startsWith("/")) path = "/" + path;

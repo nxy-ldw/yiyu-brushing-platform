@@ -16,3 +16,13 @@ add-postgres.js
 check-railway.js
 setup-database.js
 redeploy.js
+*.keystore
+local.properties
+*.apk
+crop_*.ps1
+resize*.ps1
+error_*.jpg
+status_*.png
+part_*.png
+full_small.png
+check_resized.png

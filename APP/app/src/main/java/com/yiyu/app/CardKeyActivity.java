@@ -1,5 +1,6 @@
 package com.yiyu.app;
 
+import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
@@ -13,12 +14,11 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.view.KeyEvent;
 
 import org.json.JSONObject;
 
-import androidx.appcompat.app.AppCompatActivity;
-
-public class CardKeyActivity extends AppCompatActivity {
+public class CardKeyActivity extends Activity {
 
     private EditText etCardKey;
     private Button btnVerify;
@@ -51,19 +51,27 @@ public class CardKeyActivity extends AppCompatActivity {
             }
         });
 
-        etCardKey.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                verifyCard();
-                return true;
+        etCardKey.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_DONE) {
+                    verifyCard();
+                    return true;
+                }
+                return false;
             }
-            return false;
         });
 
-        btnVerify.setOnClickListener(v -> verifyCard());
+        btnVerify.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                verifyCard();
+            }
+        });
     }
 
     private void verifyCard() {
-        String cardKey = etCardKey.getText().toString().trim();
+        final String cardKey = etCardKey.getText().toString().trim();
         if (cardKey.isEmpty()) {
             Toast.makeText(this, "请输入卡密", Toast.LENGTH_SHORT).show();
             return;
@@ -83,35 +91,44 @@ public class CardKeyActivity extends AppCompatActivity {
 
         ApiClient.post("/app/verify-card", body, new ApiClient.Callback() {
             @Override
-            public void onSuccess(JSONObject response) {
-                runOnUiThread(() -> {
-                    setLoading(false);
-                    boolean success = response.optBoolean("success", false);
-                    if (success) {
-                        String expireAt = response.optString("expireAt", "");
-                        prefManager.saveCardKey(cardKey, expireAt);
+            public void onSuccess(final JSONObject response) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        setLoading(false);
+                        boolean success = response.optBoolean("success", false);
+                        if (success) {
+                            String expireAt = response.optString("expireAt", "");
+                            prefManager.saveCardKey(cardKey, expireAt);
 
-                        layoutInfo.setVisibility(View.VISIBLE);
-                        tvExpireInfo.setText("到期时间: " + expireAt);
-                        Toast.makeText(CardKeyActivity.this, "验证成功", Toast.LENGTH_SHORT).show();
+                            layoutInfo.setVisibility(View.VISIBLE);
+                            tvExpireInfo.setText("到期时间: " + expireAt);
+                            Toast.makeText(CardKeyActivity.this, "验证成功", Toast.LENGTH_SHORT).show();
 
-                        new Handler(getMainLooper()).postDelayed(() -> {
-                            Intent intent = new Intent(CardKeyActivity.this, MainActivity.class);
-                            startActivity(intent);
-                            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                            finish();
-                        }, 1000);
-                    } else {
-                        Toast.makeText(CardKeyActivity.this, "验证失败", Toast.LENGTH_SHORT).show();
+                            new Handler(getMainLooper()).postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    Intent intent = new Intent(CardKeyActivity.this, MainActivity.class);
+                                    startActivity(intent);
+                                    overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                                    finish();
+                                }
+                            }, 1000);
+                        } else {
+                            Toast.makeText(CardKeyActivity.this, "验证失败", Toast.LENGTH_SHORT).show();
+                        }
                     }
                 });
             }
 
             @Override
-            public void onError(String message) {
-                runOnUiThread(() -> {
-                    setLoading(false);
-                    Toast.makeText(CardKeyActivity.this, message, Toast.LENGTH_LONG).show();
+            public void onError(final String message) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        setLoading(false);
+                        Toast.makeText(CardKeyActivity.this, message, Toast.LENGTH_LONG).show();
+                    }
                 });
             }
         });

@@ -25,6 +25,7 @@ public class MainActivity extends Activity {
     private PrefManager prefManager;
     private int currentTab = 0;
     private boolean pageLoaded = false;
+    private float appHeaderCssPx;
 
     private static final String[] NAV_PAGES = {"home", "group-buy", "orders", "recharge", "recharge"};
     private static final String[] NAV_LABELS = {"首页", "拼团", "订单", "充值", "我的"};
@@ -33,11 +34,35 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Force transparent status bar and draw content behind it
+        getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        );
+
         setContentView(R.layout.activity_main);
 
         prefManager = new PrefManager(this);
 
+        // Immersive status bar: extend header gradient under transparent status bar
+        int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        int statusBarHeight = resId > 0 ? getResources().getDimensionPixelSize(resId) : 0;
+        float density = getResources().getDisplayMetrics().density;
+        LinearLayout headerLayout = findViewById(R.id.headerLayout);
+        LinearLayout.LayoutParams headerParams = (LinearLayout.LayoutParams) headerLayout.getLayoutParams();
+        headerParams.height = statusBarHeight + (int)(48 * density);
+        headerLayout.setLayoutParams(headerParams);
+        headerLayout.setPadding(
+            headerLayout.getPaddingLeft(),
+            statusBarHeight,
+            headerLayout.getPaddingRight(),
+            headerLayout.getPaddingBottom()
+        );
+        appHeaderCssPx = statusBarHeight / density + 48f;
+
         webView = findViewById(R.id.webView);
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
         navItems = new LinearLayout[5];
         navItems[0] = findViewById(R.id.navHome);
@@ -95,8 +120,9 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 pageLoaded = true;
 
-                // 注入APP标识
-                view.evaluateJavascript("try { localStorage.setItem('is_app', 'true'); document.body.classList.add('is-app'); } catch(e) {}", null);
+                // 注入APP标识和动态头部高度
+                String injectJs = "try { localStorage.setItem('is_app', 'true'); document.body.classList.add('is-app'); document.documentElement.style.setProperty('--app-header-h', '" + appHeaderCssPx + "px'); } catch(e) {}";
+                view.evaluateJavascript(injectJs, null);
 
                 // 注入卡密
                 String cardKey = prefManager.getCardKey();

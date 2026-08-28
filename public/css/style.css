@@ -17,7 +17,7 @@ input,textarea{outline:none;font-family:inherit}
 img{max-width:100%;display:block}
 
 /* ===== 头部 ===== */
-.header{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:rgba(255,255,255,.85);backdrop-filter:blur(20px);z-index:1000;box-shadow:0 1px 8px rgba(0,0,0,.04);transition:all .3s}
+.header{position:fixed;top:0;left:0;right:0;height:var(--header-h);background:rgba(255,255,255,.85);backdrop-filter:blur(20px);z-index:1000;box-shadow:0 1px 8px rgba(0,0,0,.04);transition:all .3s;-webkit-transform:translateZ(0);transform:translateZ(0)}
 .header-inner{max-width:1280px;margin:0 auto;height:100%;display:flex;align-items:center;gap:24px;padding:0 20px}
 .logo{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:700;color:var(--primary);cursor:pointer;white-space:nowrap}
 .logo-icon{width:32px;height:32px}
@@ -398,14 +398,14 @@ img{max-width:100%;display:block}
     .nav-item{padding:6px 8px;font-size:12px}
 }
 /* APP端样式适配 */
-body.is-app{padding-top:48px}
-body.is-app .header{top:48px}
+body.is-app{padding-top:var(--app-header-h,48px)}
+body.is-app .header{top:var(--app-header-h,48px);backdrop-filter:none;-webkit-backdrop-filter:none;background:#fff;transition:none}
 body.is-app .nav-menu{display:none}
 body.is-app .search-box{display:none}
 body.is-app .header-inner{height:48px;padding:0 12px}
 body.is-app .logo{font-size:16px}
 body.is-app .logo-icon{width:24px;height:24px}
-body.is-app .modal-overlay{top:48px}
+body.is-app .modal-overlay{top:var(--app-header-h,48px)}
 body.is-app .product-img{height:90px}
 body.is-app .product-info{padding:5px 6px}
 body.is-app .product-title{font-size:11px}
