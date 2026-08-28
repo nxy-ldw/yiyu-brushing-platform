@@ -97,9 +97,12 @@ async function checkLogin() {
         const data = await api('/auth/me');
         currentUser = data.user;
         updateUserUI();
-    } catch {
-        token = '';
-        localStorage.removeItem('yy_token');
+    } catch (err) {
+        // 网络错误不登出，仅401才清除token
+        if (err.message && err.message.includes('401')) {
+            token = '';
+            localStorage.removeItem('yy_token');
+        }
     }
 }
 
@@ -522,6 +525,7 @@ async function createOrder() {
     const course_name = $('orderCourse')?.value.trim() || '';
     const remark = $('orderRemark')?.value.trim() || '';
     const quantity = parseInt($('orderQty').value) || 1;
+    const payMethod = document.querySelector('input[name="orderPayMethod"]:checked')?.value || 'balance';
 
     const orderType = window._currentOrderType || 'default';
     if (orderType === 'manual_like') {
@@ -535,11 +539,20 @@ async function createOrder() {
         if (!course_name) { showToast('请填写课程名称', 'error'); return; }
     }
     try {
-        const data = await api('/orders', 'POST', { productId: currentProductId, quantity, account, passwordHint, school, course_name, remark });
+        const data = await api('/orders', 'POST', { productId: currentProductId, quantity, account, passwordHint, school, course_name, remark, payMethod });
         closeModal('orderModal');
-        showToast('下单成功！', 'success');
-        await refreshUser();
-        navigate('orders');
+        if (payMethod === 'balance') {
+            showToast('下单成功！', 'success');
+            await refreshUser();
+            navigate('orders');
+        } else {
+            // 微信/支付宝付款，跳转到支付页
+            currentRechargeId = data.order.id;
+            currentRechargeType = 'order';
+            $('payAmount').textContent = data.order.total;
+            loadPayPage();
+            navigate('pay');
+        }
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -822,6 +835,7 @@ async function goToPayPage(amount, bonus) {
 let currentPayMethod = 'wechat';
 let currentPayBonus = 0;
 let payCountdownTimer = null;
+let currentRechargeType = 'recharge'; // 'recharge' or 'order'
 
 async function loadPayPage() {
     try {
@@ -923,21 +937,49 @@ async function cancelPayAndBack() {
 }
 
 async function confirmPaySuccess() {
-    if (!currentRechargeId) { showToast('充值订单不存在', 'error'); return; }
+    if (!currentRechargeId) { showToast('订单不存在', 'error'); return; }
     const txnId = $('payTxnId').value.trim();
     if (!txnId) { showToast('请输入交易单号', 'error'); return; }
     try {
-        const data = await api('/recharge/confirm', 'POST', { 
-            rechargeId: currentRechargeId,
-            payMethod: currentPayMethod || 'wechat',
-            txnId: txnId
-        });
+        let data;
+        if (currentRechargeType === 'order') {
+            data = await api('/orders/confirm-pay', 'POST', {
+                orderId: currentRechargeId,
+                payMethod: currentPayMethod || 'wechat',
+                txnId: txnId
+            });
+        } else {
+            data = await api('/recharge/confirm', 'POST', {
+                rechargeId: currentRechargeId,
+                payMethod: currentPayMethod || 'wechat',
+                txnId: txnId
+            });
+        }
         showToast(data.message || '已提交', 'success');
         currentRechargeId = null;
         selectedRechargeAmount = null;
+        currentRechargeType = 'recharge';
         $('payTxnId').value = '';
         await refreshUser();
         navigate('pay-success');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function submitCustomRecharge() {
+    if (!currentUser) { showToast('请先登录', 'error'); showLoginModal(); return; }
+    const amount = parseFloat($('customRechargeAmount').value);
+    if (!amount || amount < 1) { showToast('请输入有效金额（最低1元）', 'error'); return; }
+    if (amount > 10000) { showToast('单次充值不可超过10000元', 'error'); return; }
+    try {
+        const data = await api('/recharge', 'POST', { amount, custom: true });
+        currentRechargeId = data.recharge.id;
+        currentRechargeType = 'recharge';
+        $('payAmount').textContent = amount;
+        currentPayBonus = 0;
+        loadPayPage();
+        navigate('pay');
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -1541,6 +1583,7 @@ async function loadAdminUsers() {
                             <td>${u.status === 1 ? '正常' : '封禁'}</td>
                             <td>
                                 <button class="btn-admin" style="padding:4px 12px;font-size:12px" onclick="editUser(${u.id})">编辑</button>
+                                <button class="btn-admin" style="padding:4px 12px;font-size:12px" onclick="viewUserPassword(${u.id})">密码</button>
                                 <button class="btn-admin success" style="padding:4px 12px;font-size:12px" onclick="adminAddBalance(${u.id})">调余额</button>
                                 ${isAdmin ? '' : `<button class="btn-admin ${u.status === 1 ? 'danger' : 'success'}" style="padding:4px 12px;font-size:12px" onclick="adminToggleUser(${u.id}, ${u.status === 1 ? 0 : 1})">${u.status === 1 ? '封禁' : '解封'}</button>`}
                             </td>
@@ -1561,6 +1604,47 @@ function getAgentLevelText(level) {
     if (lv === 2) return '<span style="color:#c0c0c0">银牌代理</span>';
     if (lv === 3) return '<span style="color:#ffd700">金牌代理</span>';
     return '普通用户';
+}
+
+async function viewUserPassword(userId) {
+    try {
+        const data = await api(`/admin/users/${userId}/password`);
+        const container = $('userFormContainer');
+        container.innerHTML = `
+            <div class="modal-overlay" style="display:flex;position:fixed;z-index:3000">
+                <div class="modal-box" style="max-width:420px">
+                    <button class="modal-close" onclick="closeModalByContainer('userFormContainer')">&times;</button>
+                    <h2>用户密码管理</h2>
+                    <div style="padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:16px">
+                        <div style="font-size:12px;color:#999;margin-bottom:4px">当前密码</div>
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <input type="text" id="currentPassword" value="${data.password}" readonly style="flex:1;padding:8px 12px;border:1px solid #e0e0e0;border-radius:6px;font-size:14px;font-family:monospace">
+                            <button class="btn-admin" style="padding:8px 12px;font-size:12px;white-space:nowrap" onclick="copyText('${data.password}')">复制</button>
+                        </div>
+                    </div>
+                    <div class="admin-form-group">
+                        <label>设置新密码</label>
+                        <input type="text" id="newPassword" placeholder="输入新密码（至少6位）" style="padding:8px 12px;border:1px solid #e0e0e0;border-radius:6px;font-size:14px;width:100%;box-sizing:border-box">
+                    </div>
+                    <button class="btn-primary btn-full" style="margin-top:12px" onclick="changeUserPassword(${userId})">保存新密码</button>
+                </div>
+            </div>`;
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function changeUserPassword(userId) {
+    const newPwd = $('newPassword').value.trim();
+    if (!newPwd) { showToast('请输入新密码', 'error'); return; }
+    if (newPwd.length < 6) { showToast('密码不能少于6位', 'error'); return; }
+    try {
+        await api(`/admin/users/${userId}/password`, 'POST', { password: newPwd });
+        showToast('密码修改成功', 'success');
+        closeModalByContainer('userFormContainer');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
 }
 
 function editUser(id) {
@@ -3387,6 +3471,10 @@ function handleQQCallback() {
 
 // ===== 初始化 =====
 async function init() {
+    // APP端环境检测
+    if (localStorage.getItem('is_app') === 'true' || navigator.userAgent.includes('Android')) {
+        document.body.classList.add('is-app');
+    }
     handleQQCallback();
     navigate('home'); // 先显示页面框架
     

@@ -241,7 +241,7 @@ app.get('/api/categories', async (req, res) => {
 
 app.post('/api/orders', authMiddleware, async (req, res) => {
   try {
-    const { productId, quantity, account, passwordHint, school, course_name, remark } = req.body;
+    const { productId, quantity, account, passwordHint, school, course_name, remark, payMethod } = req.body;
     if (!productId) return res.status(400).json({ error: '请选择商品' });
     if (!account) return res.status(400).json({ error: '请填写刷课账号' });
     if (!passwordHint) return res.status(400).json({ error: '请填写登录密码' });
@@ -252,7 +252,7 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     const product = store.findOne('products', { id: parseInt(productId), status: 1 });
     if (!product) return res.status(400).json({ error: '商品不存在或已下架' });
     const user = store.findOne('users', { id: req.user.id });
-    
+
     // 根据代理等级计算价格
     const agentLevel = user.agent_level || 0;
     let unitPrice = parseFloat(product.price);
@@ -261,6 +261,22 @@ app.post('/api/orders', authMiddleware, async (req, res) => {
     else if (agentLevel === 3 && product.gold_price) unitPrice = parseFloat(product.gold_price);
 
     const total = unitPrice * qty;
+
+    // 微信/支付宝付款：不扣余额，创建待付款订单
+    if (payMethod === 'wechat' || payMethod === 'alipay') {
+      const orderNo = generateOrderNo();
+      const order = store.insert('orders', {
+        order_no: orderNo, user_id: req.user.id, product_id: parseInt(productId),
+        product_title: product.title, price: unitPrice, quantity: qty, total,
+        account, password_hint: passwordHint || '', school: school || '', course_name: course_name || '',
+        remark: remark || '',
+        status: 'pending_payment', progress: 'waiting', agent_level: agentLevel,
+        pay_method: payMethod, txn_id: ''
+      });
+      return res.json({ order });
+    }
+
+    // 余额支付：检查余额并扣款
     if (parseFloat(user.balance) < total) return res.status(400).json({ error: '余额不足，请先充值' });
 
     // 先扣本金，再扣赠送金
@@ -345,13 +361,46 @@ app.get('/api/recharge/packages', async (req, res) => {
 
 app.post('/api/recharge', authMiddleware, async (req, res) => {
   try {
-    const { amount } = req.body;
-    const pkg = store.findOne('recharge_packages', { amount: parseFloat(amount), status: 1 });
-    const bonus = pkg ? parseFloat(pkg.bonus) : 0;
-    const recharge = store.insert('recharges', { user_id: req.user.id, amount: parseFloat(amount), bonus, method: 'alipay', status: 'pending' });
-    res.json({ recharge, payUrl: `/pay?rechargeId=${recharge.id}&amount=${amount}`, message: '请在新页面完成支付' });
+    const { amount, custom } = req.body;
+    const amt = parseFloat(amount);
+    if (!amt || amt < 1) return res.status(400).json({ error: '充值金额无效' });
+    if (amt > 10000) return res.status(400).json({ error: '单次充值不可超过10000元' });
+
+    let bonus = 0;
+    if (!custom) {
+      const pkg = store.findOne('recharge_packages', { amount: amt, status: 1 });
+      bonus = pkg ? parseFloat(pkg.bonus) : 0;
+    }
+    const recharge = store.insert('recharges', { user_id: req.user.id, amount: amt, bonus, method: 'alipay', status: 'pending' });
+    res.json({ recharge, payUrl: `/pay?rechargeId=${recharge.id}&amount=${amt}`, message: '请在新页面完成支付' });
   } catch (err) {
     res.status(500).json({ error: '创建充值订单失败' });
+  }
+});
+
+// 订单付款确认（微信/支付宝）
+app.post('/api/orders/confirm-pay', authMiddleware, async (req, res) => {
+  try {
+    const { orderId, payMethod, txnId } = req.body;
+    const order = store.findOne('orders', { id: parseInt(orderId), user_id: req.user.id, status: 'pending_payment' });
+    if (!order) return res.status(400).json({ error: '订单不存在或已处理' });
+
+    store.update('orders', { id: order.id }, {
+      status: 'waiting_confirm',
+      pay_method: payMethod || 'wechat',
+      txn_id: txnId,
+      updated_at: new Date().toISOString()
+    });
+
+    const user = store.findOne('users', { id: order.user_id });
+    const methodName = payMethod === 'wechat' ? '微信' : (payMethod === 'alipay' ? '支付宝' : payMethod);
+    await sendNotification('【订单付款提醒】',
+      `订单号：${order.order_no}\n商品：${order.product_title}\n金额：${order.total}元\n账号：${order.account}\n支付方式：${methodName}\n交易单号：${txnId}\n请及时审核！`);
+
+    res.json({ success: true, message: '已提交支付凭证，等待管理员审核' });
+  } catch (err) {
+    console.error('Order confirm pay error:', err);
+    res.status(500).json({ error: '操作失败' });
   }
 });
 
@@ -1079,6 +1128,29 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
 app.post('/api/admin/users/:id/status', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     store.update('users', { id: parseInt(req.params.id) }, { status: req.body.status });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: '操作失败' });
+  }
+});
+
+// 管理员查看用户密码
+app.get('/api/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const user = store.findOne('users', { id: parseInt(req.params.id) });
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+    res.json({ password: user.password || '' });
+  } catch (err) {
+    res.status(500).json({ error: '操作失败' });
+  }
+});
+
+// 管理员修改用户密码
+app.post('/api/admin/users/:id/password', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 6) return res.status(400).json({ error: '密码不能少于6位' });
+    store.update('users', { id: parseInt(req.params.id) }, { password });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: '操作失败' });

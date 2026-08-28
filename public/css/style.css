@@ -380,12 +380,47 @@ img{max-width:100%;display:block}
     .modal-box{padding:24px}
 }
 @media (max-width:480px){
-    .products-grid{grid-template-columns:1fr}
-    .recharge-packages{grid-template-columns:1fr}
+    .products-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+    .recharge-packages{grid-template-columns:repeat(2,1fr)}
     .header-right{gap:8px}
     .btn-login,.btn-register{padding:6px 14px;font-size:13px}
     .balance-badge{display:none}
+    .product-card{border-radius:8px}
+    .product-img{height:100px}
+    .product-info{padding:6px 8px}
+    .product-title{font-size:12px;-webkit-line-clamp:1}
+    .product-price{font-size:14px}
+    .product-sales{font-size:10px}
+    .product-stock{font-size:10px}
+    .btn-buy{padding:3px 8px;font-size:11px}
+    .page-container{padding:10px}
+    .nav-menu{gap:0}
+    .nav-item{padding:6px 8px;font-size:12px}
 }
+/* APP端样式适配 */
+body.is-app{padding-top:48px}
+body.is-app .header{top:48px}
+body.is-app .nav-menu{display:none}
+body.is-app .search-box{display:none}
+body.is-app .header-inner{height:48px;padding:0 12px}
+body.is-app .logo{font-size:16px}
+body.is-app .logo-icon{width:24px;height:24px}
+body.is-app .modal-overlay{top:48px}
+body.is-app .product-img{height:90px}
+body.is-app .product-info{padding:5px 6px}
+body.is-app .product-title{font-size:11px}
+body.is-app .product-price{font-size:13px}
+body.is-app .btn-buy{padding:3px 6px;font-size:10px}
+body.is-app .product-meta{flex-wrap:wrap;gap:2px}
+body.is-app .product-sales{font-size:9px}
+body.is-app .product-stock{font-size:9px}
+body.is-app .page-container{padding:8px}
+body.is-app .recharge-package{padding:10px 6px}
+body.is-app .recharge-amount{font-size:18px}
+body.is-app .balance-card{padding:14px}
+body.is-app .balance-amount{font-size:24px}
+body.is-app .modal-box{padding:16px;margin:16px}
+body.is-app .form-group input,.is-app .form-group textarea{font-size:14px}
 
 @keyframes payBounce{0%{transform:scale(0)}60%{transform:scale(1.1)}100%{transform:scale(1)}}
 @keyframes paySpin{to{transform:rotate(360deg)}}

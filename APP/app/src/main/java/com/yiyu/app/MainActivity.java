@@ -1,9 +1,11 @@
 package com.yiyu.app;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -14,20 +16,16 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
-
 import org.json.JSONObject;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
 
     private WebView webView;
-    private SwipeRefreshLayout swipeRefresh;
     private LinearLayout[] navItems;
     private PrefManager prefManager;
     private int currentTab = 0;
+    private boolean pageLoaded = false;
 
-    // Bottom nav page mappings (SPA navigate function args)
     private static final String[] NAV_PAGES = {"home", "group-buy", "orders", "recharge", "recharge"};
     private static final String[] NAV_LABELS = {"首页", "拼团", "订单", "充值", "我的"};
 
@@ -40,9 +38,7 @@ public class MainActivity extends AppCompatActivity {
         prefManager = new PrefManager(this);
 
         webView = findViewById(R.id.webView);
-        swipeRefresh = findViewById(R.id.swipeRefresh);
 
-        // Initialize bottom navigation items
         navItems = new LinearLayout[5];
         navItems[0] = findViewById(R.id.navHome);
         navItems[1] = findViewById(R.id.navGroupBuy);
@@ -52,15 +48,22 @@ public class MainActivity extends AppCompatActivity {
 
         for (int i = 0; i < navItems.length; i++) {
             final int index = i;
-            navItems[i].setOnClickListener(v -> selectTab(index));
+            navItems[i].setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    selectTab(index);
+                }
+            });
         }
 
         setupWebView();
-        setupSwipeRefresh();
-
-        // Load the server homepage
-        loadPage("home");
+        loadMainPage();
         selectTab(0);
+    }
+
+    private void loadMainPage() {
+        String url = ServerConfig.getWebUrl("/");
+        webView.loadUrl(url);
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -84,29 +87,26 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                // Keep all URLs within the WebView
-                if (url.startsWith(ServerConfig.SERVER_URL)) {
-                    return false;
-                }
-                // External links open in browser
                 return false;
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                swipeRefresh.setRefreshing(false);
+                pageLoaded = true;
 
-                // Inject card key into localStorage for API authentication
+                // 注入APP标识
+                view.evaluateJavascript("try { localStorage.setItem('is_app', 'true'); document.body.classList.add('is-app'); } catch(e) {}", null);
+
+                // 注入卡密
                 String cardKey = prefManager.getCardKey();
                 if (cardKey != null) {
                     String js = "try { localStorage.setItem('yy_app_card_key', '" + cardKey + "'); } catch(e) {}";
                     view.evaluateJavascript(js, null);
                 }
 
-                // Mark that we're in the app
-                view.evaluateJavascript("try { localStorage.setItem('is_app', 'true'); } catch(e) {}", null);
+                // 导航到当前选中的tab
+                navigateToTab(currentTab);
             }
         });
 
@@ -114,41 +114,30 @@ public class MainActivity extends AppCompatActivity {
         webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
     }
 
-    private void setupSwipeRefresh() {
-        swipeRefresh.setOnRefreshListener(() -> webView.reload());
-        swipeRefresh.setColorSchemeColors(0x667eea, 0x764ba2);
-    }
-
     private void selectTab(int index) {
         currentTab = index;
 
-        // Update nav item styles
         for (int i = 0; i < navItems.length; i++) {
-            View item = navItems[i];
+            ViewGroup item = navItems[i];
             TextView label = (TextView) item.getChildAt(1);
             if (label != null) {
                 label.setTextColor(i == index ? 0xFF667eea : 0xFF999999);
             }
-            // Update icon tint
             View icon = item.getChildAt(0);
             if (icon != null) {
                 icon.setSelected(i == index);
             }
         }
 
-        // Navigate to the corresponding page
-        loadPage(NAV_PAGES[index]);
+        // 如果页面已加载，直接导航，不重新加载页面
+        if (pageLoaded) {
+            navigateToTab(index);
+        }
     }
 
-    private void loadPage(String page) {
-        String url = ServerConfig.getWebUrl("/");
-        webView.loadUrl(url);
-
-        // After page loads, call the SPA navigate function
-        webView.postDelayed(() -> {
-            String js = "if (typeof navigate === 'function') { navigate('" + page + "'); }";
-            webView.evaluateJavascript(js, null);
-        }, 1500);
+    private void navigateToTab(int index) {
+        String js = "if (typeof navigate === 'function') { navigate('" + NAV_PAGES[index] + "'); }";
+        webView.evaluateJavascript(js, null);
     }
 
     @Override
@@ -167,8 +156,13 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface
-        public void showToast(String message) {
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
+        public void showToast(final String message) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+                }
+            });
         }
 
         @JavascriptInterface
