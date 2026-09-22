@@ -1,4 +1,5 @@
 # 一屿刷课平台        https://yiyu-brushing-platform-production.up.railway.app/
+# 服务器到期，暂无能力承担，不在续费。请尊重 Apache2.0 协议与开源精神，二次开发保留原作者信息。
 
 现代化刷课服务平台，基于 Node.js + Express + PostgreSQL 构建。
 
@@ -78,5 +79,7 @@ npm start
 6. 设置环境变量
 7. 自动部署
 
-## License
-MIT
+欢迎提交 Issue 来交换您的看法和对脚本的更多建议！
+
+作者：南京信息职业技术学院   一屿Yy
+
